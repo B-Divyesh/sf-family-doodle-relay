@@ -1,0 +1,9 @@
+{
+  "slug": "family-doodle-relay",
+  "title": "Family Doodle Relay",
+  "summary": "Draw and guess together in a private two-person room.",
+  "artifact_class": "web-with-backend",
+  "user": "A parent and child playing remotely who want a calm, private cooperative game.",
+  "smallest_useful_product": "A two-person web room with one private invite code, alternating 45-second draw, guess, and add-a-detail rounds, with an end-of-session downloadable strip.",
+  "monetization": "one-time"
+}
