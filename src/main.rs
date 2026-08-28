@@ -74,7 +74,7 @@ struct RoomView {
 struct CreateRoom { #[serde(default)] paid: bool }
 
 #[derive(Serialize)]
-struct RoomCredentials { code: String, token: String, role: &'static str }
+struct RoomCredentials { code: String, token: String, role: &'static str, expires_at: u64 }
 
 #[derive(Deserialize)]
 struct JoinRoom { code: String }
@@ -139,6 +139,7 @@ async fn shutdown_signal() {
 }
 
 async fn security_and_rate_limit(State(state): State<AppState>, request: Request<Body>, next: Next) -> Response {
+    let request_path = request.uri().path().to_string();
     if request.uri().path() != "/health" {
         let key = request.headers().get("x-forwarded-for").and_then(|v| v.to_str().ok()).and_then(|v| v.split(',').next()).unwrap_or("direct").trim().to_string();
         let mut limits = state.limits.lock().await;
@@ -155,6 +156,13 @@ async fn security_and_rate_limit(State(state): State<AppState>, request: Request
     headers.insert("referrer-policy", HeaderValue::from_static("no-referrer"));
     headers.insert("permissions-policy", HeaderValue::from_static("camera=(), microphone=(), geolocation=()"));
     headers.insert("content-security-policy", HeaderValue::from_static("default-src 'self'; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; connect-src 'self' wss: ws: https://api.sociobot.in; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self' https://api.sociobot.in"));
+    if request_path.starts_with("/assets/") {
+        headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("public, max-age=31536000, immutable"));
+    } else if request_path.ends_with(".webp") || request_path.ends_with(".png") || request_path.ends_with(".svg") {
+        headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("public, max-age=86400"));
+    } else {
+        headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
+    }
     response
 }
 
@@ -175,7 +183,7 @@ async fn create_room(State(state): State<AppState>, Json(input): Json<CreateRoom
     let (tx, _) = broadcast::channel(128);
     let room = Room { code: code.clone(), host_token: host_token.clone(), guest_token: None, host_connected: false, guest_connected: false, phase: 0, total_turns: if input.paid { 8 } else { 4 }, deadline: None, strokes: vec![], snapshots: vec![], guesses: vec![], created: Instant::now(), tx };
     state.rooms.lock().await.insert(code.clone(), room);
-    (StatusCode::CREATED, Json(RoomCredentials { code, token: host_token, role: "host" }))
+    (StatusCode::CREATED, Json(RoomCredentials { code, token: host_token, role: "host", expires_at: now_secs() + ROOM_TTL.as_secs() }))
 }
 
 async fn join_room(State(state): State<AppState>, Json(input): Json<JoinRoom>) -> Response {
@@ -186,10 +194,11 @@ async fn join_room(State(state): State<AppState>, Json(input): Json<JoinRoom>) -
     let token = Uuid::new_v4().to_string();
     room.guest_token = Some(token.clone());
     room.deadline = Some(now_secs() + TURN_SECONDS);
+    let expires_at = now_secs() + room_ttl_remaining(room);
     broadcast_views(room);
     drop(rooms);
-    spawn_timer(state.clone(), code);
-    (StatusCode::OK, Json(RoomCredentials { code, token, role: "guest" })).into_response()
+    spawn_timer(state.clone(), code.clone());
+    (StatusCode::OK, Json(RoomCredentials { code, token, role: "guest", expires_at })).into_response()
 }
 
 async fn get_room(State(state): State<AppState>, Path(code): Path<String>, Query(auth): Query<AuthQuery>) -> Response {
@@ -285,8 +294,9 @@ fn active_role(phase: usize) -> &'static str { ["host", "guest", "guest", "host"
 fn role_for<'a>(room: &'a Room, token: &str) -> Option<&'a str> { if token == room.host_token { Some("host") } else if room.guest_token.as_deref() == Some(token) { Some("guest") } else { None } }
 fn normalize_code(code: &str) -> String { code.chars().filter(|c| c.is_ascii_alphanumeric()).flat_map(char::to_uppercase).take(12).collect() }
 fn now_secs() -> u64 { SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs() }
+fn room_ttl_remaining(room: &Room) -> u64 { ROOM_TTL.saturating_sub(room.created.elapsed()).as_secs() }
 
-async fn spawn_timer(state: AppState, code: String) {
+fn spawn_timer(state: AppState, code: String) {
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(Duration::from_secs(1)).await;

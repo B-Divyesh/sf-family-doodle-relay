@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://family-doodle-relay.sociobot.in/sitemap.xml
