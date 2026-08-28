@@ -1,5 +1,5 @@
 {
-  "navigationFallback": { "rewrite": "/index.html", "exclude": ["/assets/*", "*.webp", "*.png", "*.svg", "*.xml", "*.txt"] },
+  "navigationFallback": { "rewrite": "/index.html", "exclude": ["/assets/*", "*.avif", "*.webp", "*.jpg", "*.png", "*.svg", "*.xml", "*.txt"] },
   "responseOverrides": { "404": { "rewrite": "/404.html" } },
   "globalHeaders": {
     "X-Content-Type-Options": "nosniff",

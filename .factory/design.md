@@ -49,6 +49,6 @@ Prompt sheet: “Monochrome editorial newspaper engraving, overhead view of two 
 
 Negative list: readable words, logos, colour gradients, glossy 3D, photoreal faces, copyrighted characters, screens, extra fingers, malformed hands.
 
-Generation: Azure AI Foundry image generation through `/opt/fleet/lib/gen-image.sh`, model deployment `factory-image`, generated 2026-08-28. Generated work is original for this product. Source PNG and prompt sidecar live in `assets/src/`; optimized WebP and social crop ship in `frontend/public/`.
+Generation: Azure AI Foundry image generation through `/opt/fleet/lib/gen-image.sh`, model deployment `factory-image`, generated 2026-08-28. Generated work is original for this product. Source PNG and prompt sidecar live in `assets/src/`; optimized AVIF, WebP, JPEG fallback, and social crop ship in `frontend/public/`.
 
 Hand-authored SVG marks (favicon and small doodle motifs) use only original geometric strokes and the palette above.

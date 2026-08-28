@@ -42,7 +42,7 @@ The container needs no other environment variables. `GET /health` returns the bu
 
 ## Architecture and privacy
 
-The browser app uses Vite and TypeScript. Rust, Axum, and an in-memory SQLite connection serve the app. Live room state stays in process memory. Private room codes contain about 60 bits of randomness. Every non-health route is rate limited by the first `X-Forwarded-For` address.
+The browser app uses Vite and TypeScript. Rust, Axum, and an in-memory SQLite connection serve the app. Live room state stays in process memory. Every non-health route is rate limited by the first `X-Forwarded-For` address.
 
 Browser storage holds private room keys and an optional purchase license. The server does not ask for names, ages, email addresses, or profiles. See `/privacy` and `/terms`.
 

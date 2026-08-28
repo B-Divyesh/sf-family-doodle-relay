@@ -1,5 +1,5 @@
 const CACHE = 'relay-shell-v1';
-const CORE = ['/', '/demo', '/relay-hero-mobile.webp', '/favicon.svg'];
+const CORE = ['/', '/demo', '/relay-hero-mobile.avif', '/favicon.svg'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(CORE)));
@@ -18,5 +18,5 @@ self.addEventListener('fetch', event => {
     const copy = response.clone();
     caches.open(CACHE).then(cache => cache.put(event.request, copy));
     return response;
-  }).catch(() => caches.match(event.request).then(hit => hit || caches.match('/'))));
+  }).catch(() => caches.match(event.request).then(hit => hit || (event.request.mode === 'navigate' ? caches.match('/') : Response.error()))));
 });

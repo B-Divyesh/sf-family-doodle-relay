@@ -22,7 +22,7 @@ test('phone layout has no horizontal overflow and keyboard actions work', async 
   await expect(page.getByRole('button', { name: 'Undo last line' })).toBeEnabled();
 });
 
-test('@claim:demo-sandbox sample demo stays isolated and same-origin', async ({ page, context }) => {
+test('@claim:demo-sandbox @claim:privacy-defaults sample demo stays isolated and same-origin', async ({ page, context }) => {
   const offOrigin: string[] = [];
   page.on('request', request => { if (new URL(request.url()).origin !== 'http://127.0.0.1:8080') offOrigin.push(request.url()); });
   await page.goto('/demo');
@@ -34,6 +34,11 @@ test('@claim:demo-sandbox sample demo stays isolated and same-origin', async ({ 
   await context.setOffline(true);
   await page.getByRole('button', { name: 'Reset demo' }).click();
   await expect(page.getByText('A house at sea')).toBeVisible();
+  await context.setOffline(false);
+  await page.goto('/');
+  await expect(page.getByText('Public rooms or strangers')).toBeVisible();
+  await expect(page.getByText('Ads or behaviour tracking')).toBeVisible();
+  expect(await context.cookies()).toEqual([]);
 });
 
 test('@claim:png-export finished relay downloads a PNG', async ({ page }) => {
@@ -81,8 +86,8 @@ test('@claim:family-edition paid rooms contain eight turns', async ({ request })
 test('@claim:live-relay two players complete four synced turns', async ({ browser, request }) => {
   const created = await (await request.post('/api/rooms', { data: { paid: false } })).json();
   const joined = await (await request.post('/api/rooms/join', { data: { code: created.code } })).json();
-  const hostContext = await browser.newContext();
-  const guestContext = await browser.newContext();
+  const hostContext = await browser.newContext({ extraHTTPHeaders: { 'X-Forwarded-For': '198.51.100.11' } });
+  const guestContext = await browser.newContext({ extraHTTPHeaders: { 'X-Forwarded-For': '198.51.100.12' } });
   const host = await hostContext.newPage();
   const guest = await guestContext.newPage();
   await host.goto('/');
@@ -91,6 +96,7 @@ test('@claim:live-relay two players complete four synced turns', async ({ browse
   await guest.evaluate(({ code, value }) => localStorage.setItem(`relay:room:${code}`, JSON.stringify(value)), { code: created.code, value: joined });
   await Promise.all([host.goto(`/room/${created.code}`), guest.goto(`/room/${created.code}`)]);
   await expect(host.getByText('Both players are here')).toBeVisible();
+  await expect(host.locator('#timer')).toHaveText(/00:4[0-5]/);
   await host.getByRole('button', { name: 'Add a sample mark' }).click();
   await host.getByRole('button', { name: 'Finish this turn' }).click();
   await expect(guest.getByRole('heading', { name: 'Write your guess' })).toBeVisible();
@@ -108,7 +114,7 @@ test('@claim:live-relay two players complete four synced turns', async ({ browse
   await guestContext.close();
 });
 
-test('rate limiter returns 429 with Retry-After', async ({ playwright }) => {
+test('@claim:rate-limit rate limiter returns 429 with Retry-After', async ({ playwright }) => {
   const client = await playwright.request.newContext({ baseURL: 'http://127.0.0.1:8080', extraHTTPHeaders: { 'X-Forwarded-For': '203.0.113.77' } });
   const responses = await Promise.all(Array.from({ length: 55 }, () => client.get('/privacy')));
   const limited = responses.filter(response => response.status() === 429);
