@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "concurrently -k \"vite --host 0.0.0.0\" \"cargo run\"",
     "build": "vite build",
-    "test": "npm run build && cargo test && playwright test",
+    "test": "npm run build && npm run typecheck && cargo test && playwright test",
+    "typecheck": "tsc -p frontend/tsconfig.json --noEmit",
     "test:claims": "playwright test --grep @claim:",
     "preview": "cargo run"
   },

@@ -14,6 +14,7 @@ RUN cargo build --release
 
 FROM debian:bookworm-slim AS runtime
 RUN useradd --system --uid 10001 --create-home relay
+RUN mkdir /data && chown relay:relay /data
 WORKDIR /app
 COPY --from=backend /build/target/release/family-doodle-relay /usr/local/bin/family-doodle-relay
 COPY --from=frontend /build/dist ./dist

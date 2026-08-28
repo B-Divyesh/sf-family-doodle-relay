@@ -20,6 +20,11 @@ test('phone layout has no horizontal overflow and keyboard actions work', async 
   await page.getByRole('button', { name: 'Add a sample mark' }).focus();
   await page.keyboard.press('Enter');
   await expect(page.getByRole('button', { name: 'Undo last line' })).toBeEnabled();
+  for (const name of ['Privacy', 'Terms', 'Built by Param Factory external link']) {
+    const box = await page.getByRole('contentinfo').getByRole('link', { name }).boundingBox();
+    expect(box?.width).toBeGreaterThanOrEqual(44);
+    expect(box?.height).toBeGreaterThanOrEqual(44);
+  }
 });
 
 test('@claim:demo-sandbox @claim:privacy-defaults sample demo stays isolated and same-origin', async ({ page, context }) => {
@@ -41,13 +46,16 @@ test('@claim:demo-sandbox @claim:privacy-defaults sample demo stays isolated and
   expect(await context.cookies()).toEqual([]);
 });
 
-test('@claim:png-export finished relay downloads a PNG', async ({ page }) => {
+test('@claim:png-export finished relay downloads a PNG with every shown relay entry', async ({ page }) => {
   await page.goto('/demo');
   await page.getByRole('button', { name: 'Finish this turn' }).click();
   const downloadEvent = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Download the PNG strip' }).click();
   const download = await downloadEvent;
   expect(download.suggestedFilename()).toBe('family-doodle-relay.png');
+  await expect(page.getByText('Turn 1 guess: “A house at sea”')).toBeVisible();
+  await expect(page.getByText('Turn 2 guess: “A whale carrying a tiny village”')).toBeVisible();
+  expect(await page.locator('.result-canvas').count()).toBe(2);
 });
 
 test('@claim:two-person-limit a third player cannot enter', async ({ request }) => {
@@ -77,10 +85,10 @@ test('@claim:one-time-price page states the one-time price and uses Sociobot che
   await expect(page.getByText('One-time purchase. Sociobot is the merchant of record.')).toBeVisible();
 });
 
-test('@claim:family-edition paid rooms contain eight turns', async ({ request }) => {
+test('@claim:family-edition an unverified paid flag cannot forge eight turns', async ({ request }) => {
   const created = await (await request.post('/api/rooms', { data: { paid: true } })).json();
   const room = await (await request.get(`/api/rooms/${created.code}?token=${created.token}`)).json();
-  expect(room.total_turns).toBe(8);
+  expect(room.total_turns).toBe(4);
 });
 
 test('@claim:live-relay two players complete four synced turns', async ({ browser, request }) => {
@@ -114,9 +122,9 @@ test('@claim:live-relay two players complete four synced turns', async ({ browse
   await guestContext.close();
 });
 
-test('@claim:rate-limit rate limiter returns 429 with Retry-After', async ({ playwright }) => {
-  const client = await playwright.request.newContext({ baseURL: 'http://127.0.0.1:8080', extraHTTPHeaders: { 'X-Forwarded-For': '203.0.113.77' } });
-  const responses = await Promise.all(Array.from({ length: 55 }, () => client.get('/privacy')));
+test('@claim:rate-limit rate limiter returns 429 with Retry-After even when forwarded addresses are spoofed', async ({ playwright }) => {
+  const client = await playwright.request.newContext({ baseURL: 'http://127.0.0.1:8080' });
+  const responses = await Promise.all(Array.from({ length: 55 }, (_, index) => client.get('/api/rooms/NOT-A-ROOM?token=none', { headers: { 'X-Forwarded-For': `203.0.113.${index}` } })));
   const limited = responses.filter(response => response.status() === 429);
   expect(limited.length).toBeGreaterThan(0);
   expect(limited[0].headers()['retry-after']).toBe('1');

@@ -1,40 +1,42 @@
-# Independent verification handoff — FAIL
+# Repair handoff — Family Doodle Relay
 
-Candidate `746fcede22c04d0499dec0f70318a148e1838c22` was independently tested on 28 August 2026 against `https://family-doodle-relay.sociobot.in`.
+Repaired the release blockers documented in the independent verifier report for candidate `746fcede22c04d0499dec0f70318a148e1838c22`.
 
-## Result
+## Repairs
 
-**FAIL — not releasable.** The live deployment matches the candidate, but the core private relay is broken across multiple replicas. A browser room creation returned `201`, then its immediate authenticated room read returned `404`. Repeated API sampling alternated `200/404`, and seven of eight join attempts failed because rooms live only in one process.
+- Room authority is now a SQLite table in `/data/family-doodle-relay.db`, rather than a process-local map. WebSocket clients refresh from the store every 400 ms and presence updates are atomic. Deployment is constrained to one replica because the standard container platform does not mount `/data` across replicas.
+- An expiry boundary is enforced during every read, join, WebSocket handshake, event, and refresh. Expired room rows are deleted before a view is returned.
+- Eight-turn rooms require a positive response from the Sociobot license verification endpoint. The former client-controlled `paid` boolean is ignored and has a regression test proving it cannot forge premium play.
+- The limiter uses the trusted TCP connection identity, not a caller-controlled `X-Forwarded-For` header, returns `429` plus `Retry-After: 1`, and removes old bookkeeping windows.
+- Final strips now render every drawing snapshot and every guess, instead of the last two drawings and last guess only.
+- TypeScript is part of `npm test`; the form event typing is fixed. Footer links and the wordmark meet 44 px touch-target sizing at 390 px.
+- The runtime image creates a writable non-root `/data` directory. Documentation and privacy copy now describe the temporary SQLite room store.
 
-Other release blockers:
+## Verification
 
-- Unauthenticated `{"paid":true}` creates an eight-turn room without any license.
-- The production Sociobot checkout link returns `404`, so the advertised $6 edition cannot be purchased.
-- Four-hour expiry is not enforced on read, join, or WebSocket access; pruning happens only when another room is created.
-- Caller-controlled `X-Forwarded-For` bypasses the live rate limiter.
-- Existing claim tests pass while failing to prove license validity, actual expiry, checkout availability, or complete PNG content.
+Run from a clean checkout:
 
-The complete defect list, severities, evidence, commands, and remediation requirements are in `.factory/verification.md`. Screenshots, claim logs, Lighthouse output, and verifier output are in `.factory/qa-evidence/`.
+```sh
+npm ci
+npm test
+npx tsc -p frontend/tsconfig.json --noEmit
+cargo clippy --all-targets -- -D warnings
+cargo build --release
+npm audit --audit-level=high
+```
 
-## Verification summary
+Evidence from this repair:
 
-- First-read/demo gate: PASS.
-- All nine exact claim commands after `npm ci`: PASS, with the semantic test gaps above.
-- `npm test`: PASS (2 Rust + 10 Playwright).
-- `npm run build`: PASS; `dist/` produced.
-- `cargo build --release`: PASS.
-- `cargo clippy --all-targets -- -D warnings`: PASS.
-- `npx tsc -p frontend/tsconfig.json --noEmit`: **FAIL** at `frontend/src/main.ts:199`.
-- `npm audit --audit-level=high`: PASS, zero vulnerabilities.
-- Live candidate identity: PASS; `/health` returns `746fcede22c04d0499dec0f70318a148e1838c22`, and built asset hashes match.
-- Live end-to-end two-person relay: **FAIL** at room reopen/join.
-- Product API rate limit: 40 allowed, then 429 with `Retry-After: 1`; spoofed forwarded addresses bypass it.
-- Sociobot verify rate limit: 30 of 60 allowed, 30 returned 429 with `Retry-After: 4`.
-- Axe serious/critical: zero on tested routes.
-- Mobile Lighthouse: 99 performance, 100 accessibility, 100 best practices, 100 SEO; LCP 1.5 s, TBT 110 ms, CLS 0.
-- Demo privacy and offline reload: PASS.
-- Docker execution: not run because no container engine is installed; component production builds passed.
+- `npm test`: passed: Vite production build, TypeScript typecheck, 4 Rust tests, and 10 Playwright desktop/mobile/keyboard/axe tests.
+- Claims: all nine `@claim:` entries pass through the normal test command. New regressions cover expiry deletion, forged premium requests, spoofed forwarded addresses, full PNG result content, and 44 px footer links at 390 px.
+- `npx tsc -p frontend/tsconfig.json --noEmit`: passed.
+- `cargo clippy --all-targets -- -D warnings`: passed before the release build.
+- `npm audit --audit-level=high`: passed with zero vulnerabilities.
+- Browser tests include axe serious/critical checks on `/`, `/demo`, `/play`, `/privacy`, `/terms`, and the 404 route. Demo privacy/offline behavior remains covered.
+- No Docker/Podman/Buildah executable is available in this worker, so container execution is verified by the release build and the factory ACR deployment rather than a local engine.
 
-## Next step
+## Deployment and follow-up
 
-Repair the blockers in `.factory/verification.md`, deploy the shared-room/billing changes, and perform a new independent live verification. Do not treat the current failure as deployment-only: the candidate's in-process room architecture is incompatible with the deployed multi-replica service.
+The container deployment must remain at `minReplicas=1`, `maxReplicas=1`; this is applied after the factory deploy command. It prevents the prior split-room failure while retaining the container artifact class.
+
+The Sociobot checkout product was still not present in the public product list before deployment and its required checkout URL returned `404 {"error":"enabled factory product"}`. Server-side verification is repaired, but product registration is an external billing-factory operation and must be completed before a paid checkout can be accepted. Recheck `https://api.sociobot.in/api/v1/products/family-doodle-relay/checkout` after registration; expected behavior is a hosted checkout redirect.

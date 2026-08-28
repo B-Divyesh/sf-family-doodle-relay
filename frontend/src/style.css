@@ -30,7 +30,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .skip { position: fixed; left: 8px; top: -100px; z-index: 30; background: var(--ink); color: white; padding: 12px; }
 .skip:focus { top: 8px; }
 .site-header { min-height: 72px; border-bottom: 3px double var(--ink); display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 12px max(20px, calc((100vw - 1180px) / 2)); }
-.wordmark { font-family: Georgia, 'Times New Roman', serif; font-size: 20px; font-weight: 700; text-decoration: none; }
+.wordmark { font-family: Georgia, 'Times New Roman', serif; font-size: 20px; font-weight: 700; text-decoration: none; min-height: 44px; display: inline-flex; align-items: center; }
 .site-nav { display: flex; align-items: center; gap: 20px; font-size: 15px; }
 .site-nav a { min-height: 44px; display: inline-flex; align-items: center; }
 main { min-height: 70vh; }
@@ -80,7 +80,8 @@ input[aria-invalid='true'] { border-color: var(--danger); }
 .price-line { font-family: Georgia, 'Times New Roman', serif; font-size: 42px; margin: 16px 0; }
 .license-panel { border-left: 4px solid var(--ink); padding-left: 28px; }
 .site-footer { padding: 40px max(20px, calc((100vw - 1180px) / 2)); display: grid; grid-template-columns: 1fr auto; gap: 24px; border-top: 4px solid var(--ink); font-size: 14px; }
-.footer-links { display: flex; flex-wrap: wrap; gap: 20px; }
+.footer-links { display: flex; flex-wrap: wrap; gap: 8px; }
+.footer-links a { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; }
 .demo-banner { position: sticky; top: 0; z-index: 20; padding: 8px max(20px, calc((100vw - 1180px) / 2)); background: var(--ink); color: var(--sheet); display: flex; align-items: center; justify-content: space-between; gap: 16px; font-size: 14px; }
 .demo-banner div { display: flex; gap: 16px; align-items: center; }
 .demo-banner button, .demo-banner a { color: var(--sheet); min-height: 44px; padding: 4px 8px; border-color: var(--sheet); }
