@@ -1,0 +1,40 @@
+
+> family-doodle-relay@1.0.0 test
+> npm run build && cargo test && playwright test --grep @claim:room-expiry
+
+
+> family-doodle-relay@1.0.0 build
+> vite build
+
+vite v7.3.6 building client environment for production...
+transforming...
+✓ 4 modules transformed.
+rendering chunks...
+computing gzip size...
+../dist/index.html                  1.23 kB │ gzip: 0.57 kB
+../dist/assets/index-DPcFDyAn.css   9.20 kB │ gzip: 2.83 kB
+../dist/assets/index-P7i9qvLY.js   25.52 kB │ gzip: 9.10 kB
+✓ built in 297ms
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.14s
+     Running unittests src/main.rs (target/debug/deps/family_doodle_relay-13420edc51f2883b)
+
+running 2 tests
+test tests::codes_are_normalized ... ok
+test tests::turns_alternate_actions_and_players ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+[2m[WebServer] [22m(node:5850) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+[2m[WebServer] [22m    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.16s
+[2m[WebServer] [22m     Running `target/debug/family-doodle-relay`
+
+Running 1 test using 1 worker
+
+(node:5875) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:5875) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [chromium] › tests/product.spec.ts:63:1 › @claim:room-expiry new rooms expire within four hours (69ms)
+
+  1 passed (3.7s)
