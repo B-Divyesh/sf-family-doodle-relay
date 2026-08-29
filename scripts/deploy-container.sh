@@ -47,7 +47,12 @@ done
 echo "== deactivate superseded room owners"
 while IFS= read -r old_revision; do
   [ -z "$old_revision" ] && continue
-  az containerapp revision deactivate --resource-group "$resource_group" --name "$app_name" --revision "$old_revision" --only-show-errors -o none
+  if ! deactivate_output="$(az containerapp revision deactivate --resource-group "$resource_group" --name "$app_name" --revision "$old_revision" --only-show-errors -o none 2>&1)"; then
+    if [[ "$deactivate_output" != *"RevisionAlreadyInRequestedState"* ]]; then
+      echo "$deactivate_output" >&2
+      exit 1
+    fi
+  fi
 done < <(az containerapp revision list --resource-group "$resource_group" --name "$app_name" --query "[?properties.active && name!='${latest_revision}'].name" -o tsv)
 
 ownership_ready=false
