@@ -23,7 +23,7 @@ az containerapp env storage set --resource-group "$resource_group" --name "$envi
 /opt/fleet/lib/deploy-container.sh family-doodle-relay "$repo_dir"
 
 image="$(az containerapp show --resource-group "$resource_group" --name "$app_name" --query 'properties.template.containers[0].image' -o tsv)"
-deployment_patch="$(printf '%s' "{\"properties\":{\"template\":{\"containers\":[{\"name\":\"app\",\"image\":\"${image}\",\"resources\":{\"cpu\":0.5,\"memory\":\"1Gi\"},\"env\":[{\"name\":\"PORT\",\"value\":\"8080\"}],\"volumeMounts\":[{\"volumeName\":\"relay-data\",\"mountPath\":\"/data\"}]}],\"scale\":{\"minReplicas\":1,\"maxReplicas\":1},\"volumes\":[{\"name\":\"relay-data\",\"storageType\":\"AzureFile\",\"storageName\":\"${storage_name}\"}]}}}")"
+deployment_patch="$(printf '%s' "{\"properties\":{\"template\":{\"containers\":[{\"name\":\"app\",\"image\":\"${image}\",\"resources\":{\"cpu\":0.5,\"memory\":\"1Gi\"},\"env\":[{\"name\":\"PORT\",\"value\":\"8080\"}],\"volumeMounts\":[{\"volumeName\":\"relay-data\",\"mountPath\":\"/data\"}]}],\"scale\":{\"minReplicas\":1,\"maxReplicas\":1},\"volumes\":[{\"name\":\"relay-data\",\"storageType\":\"AzureFile\",\"storageName\":\"${storage_name}\",\"mountOptions\":\"uid=10001,gid=10001,file_mode=0770,dir_mode=0770\"}]}}}")"
 az rest --method patch --url "$app_url" --body "$deployment_patch" --only-show-errors -o none
 
 az containerapp show --resource-group "$resource_group" --name "$app_name" --query '{revision:properties.latestRevisionName,scale:properties.template.scale,volumes:properties.template.volumes,mounts:properties.template.containers[0].volumeMounts}' -o json
