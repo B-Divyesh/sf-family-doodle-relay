@@ -109,6 +109,7 @@ struct RoomCredentials {
     token: String,
     role: &'static str,
     expires_at: u64,
+    license_check_unavailable: bool,
 }
 #[derive(Deserialize)]
 struct JoinRoom {
@@ -394,21 +395,28 @@ async fn health() -> Json<serde_json::Value> {
 
 async fn create_room(State(state): State<AppState>, Json(input): Json<CreateRoom>) -> Response {
     // The client-side boolean is intentionally not authorization. Only the Sociobot verdict permits eight turns.
-    let premium =
-        match input
-            .license
-            .as_deref()
-            .filter(|token| !token.trim().is_empty())
-        {
-            Some(token) => match valid_license(&state, token).await {
-                Ok(valid) => valid,
-                Err(_) => return error(
-                    StatusCode::SERVICE_UNAVAILABLE,
-                    "The family-edition license could not be checked. Try again when connected.",
-                ),
-            },
-            None => false,
-        };
+    let mut license_check_unavailable = false;
+    let premium = match input
+        .license
+        .as_deref()
+        .filter(|token| !token.trim().is_empty())
+    {
+        Some(token) => match valid_license(&state, token).await {
+            Ok(valid) => valid,
+            Err(err) => {
+                // A purchase check can add turns, but it must never take the
+                // free game away. Keep the room at four turns and report the
+                // soft failure so the browser can explain what happened.
+                warn!(
+                    ?err,
+                    "family-edition verification unavailable; starting free room"
+                );
+                license_check_unavailable = true;
+                false
+            }
+        },
+        None => false,
+    };
     if input.paid && !premium {
         warn!("ignored unverified paid room request");
     }
@@ -459,13 +467,14 @@ async fn create_room(State(state): State<AppState>, Json(input): Json<CreateRoom
             token: host_token,
             role: "host",
             expires_at: room.expires_at,
+            license_check_unavailable,
         }),
     )
         .into_response()
 }
 async fn valid_license(state: &AppState, token: &str) -> Result<bool, reqwest::Error> {
     let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(5))
+        .timeout(Duration::from_secs(2))
         .build()
         .expect("HTTP client");
     let mut request = client.get(&state.verify_url).query(&[("license", token)]);
@@ -518,6 +527,7 @@ async fn join_room(State(state): State<AppState>, Json(input): Json<JoinRoom>) -
             token,
             role: "guest",
             expires_at: room.expires_at,
+            license_check_unavailable: false,
         }),
     )
         .into_response()

@@ -8,6 +8,10 @@ type RoomState = {
   deadline: number | null; prompt: string; strokes: Stroke[]; snapshots: Stroke[][];
   guesses: string[]; finished: boolean;
 };
+type RoomCredentials = {
+  code: string; token: string; role: 'host' | 'guest'; expires_at: number;
+  license_check_unavailable?: boolean;
+};
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 const PRODUCT = 'Family Doodle Relay';
@@ -88,7 +92,7 @@ async function createRoom() {
     const license = validCachedLicense() ? localStorage.getItem(LICENSE_KEY) : null;
     const response = await fetch('/api/rooms', {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(license ? {license} : {})});
     if (!response.ok) throw new Error('The room could not be made. Check your connection and try again.');
-    const room = await response.json();
+    const room = await response.json() as RoomCredentials;
     localStorage.setItem(`relay:room:${room.code}`, JSON.stringify(room));
     navigate(`/room/${room.code}`);
   } catch (error) {
@@ -116,8 +120,16 @@ async function joinRoom(event: SubmitEvent) {
 
 function homeRoomStart() {
   setMeta('Start a relay — Family Doodle Relay','Make a private drawing room for two people.','/play');
-  app.innerHTML = `${header()}<main id="main" class="legal route-enter"><div class="narrow"><p class="kicker">Private room</p><h1 tabindex="-1">Make a drawing room</h1><p>One invite opens for one other person. The room closes within four hours.</p><button id="create-room" class="primary">Make a private room</button><p id="create-status" class="field-error" role="alert"></p><p><a href="/" data-link>Use an invite code instead</a></p></div></main>${footer()}`;
-  bindLinks(); document.querySelector('#create-room')!.addEventListener('click', createRoom); focusHeading();
+  const savedLicense = localStorage.getItem(LICENSE_KEY);
+  app.innerHTML = `${header()}<main id="main" class="legal route-enter"><div class="narrow"><p class="kicker">Private room</p><h1 tabindex="-1">Make a drawing room</h1><p>One invite opens for one other person. The room closes within four hours.</p><button id="create-room" class="primary">Make a private room</button>${savedLicense ? `<div class="license-choice"><p>A family edition license is saved on this device.</p><button id="remove-license" type="button">Remove saved license</button><p id="license-choice-status" role="status"></p></div>` : ''}<p id="create-status" class="field-error" role="alert"></p><p><a href="/" data-link>Use an invite code instead</a></p></div></main>${footer()}`;
+  bindLinks(); document.querySelector('#create-room')!.addEventListener('click', createRoom);
+  document.querySelector<HTMLButtonElement>('#remove-license')?.addEventListener('click', () => {
+    localStorage.removeItem(LICENSE_KEY);
+    localStorage.removeItem(LICENSE_CACHE);
+    document.querySelector('#license-choice-status')!.textContent = 'Saved license removed. This device will make free four-turn rooms.';
+    document.querySelector('#remove-license')?.remove();
+  });
+  focusHeading();
 }
 
 async function loadRoom(code: string) {
@@ -128,7 +140,7 @@ async function loadRoom(code: string) {
     const response = await fetch(`/api/rooms/${encodeURIComponent(code)}?token=${encodeURIComponent(credentials.token)}`);
     const result = await response.json();
     if (!response.ok) throw new Error(result.error);
-    renderRoom(result, false, credentials.token);
+    renderRoom(result, false, credentials.token, Boolean((credentials as RoomCredentials).license_check_unavailable));
   } catch (error) { roomError(error instanceof Error ? error.message : 'The room did not open. Check the connection and try again.'); }
 }
 
@@ -137,7 +149,7 @@ function roomError(message: string) {
   app.innerHTML = `${header()}<main id="main" class="legal"><div class="narrow"><h1 tabindex="-1">The room did not open</h1><p class="notice" role="alert">${escapeHtml(message)}</p><a class="button primary" href="/play" data-link>Make a new room</a></div></main>${footer()}`; bindLinks(); focusHeading();
 }
 
-function renderRoom(initial: RoomState, isDemo: boolean, token?: string) {
+function renderRoom(initial: RoomState, isDemo: boolean, token?: string, licenseCheckUnavailable = false) {
   let state = initial;
   let socket: WebSocket | undefined;
   let timerId = 0;
@@ -145,7 +157,7 @@ function renderRoom(initial: RoomState, isDemo: boolean, token?: string) {
   setMeta(`${isDemo?'Demo':'Room'} — Family Doodle Relay`, 'Take a turn in a private two-person drawing relay.', isDemo?'/demo':`/room/${state.code}`);
   const shell = () => `${isDemo?demoBanner():''}${header()}<main id="main" class="room-page route-enter"><div class="wrap">
     <div class="room-masthead"><div><p class="kicker">Current turn</p><h1 tabindex="-1">${state.finished?'Your relay is finished':turnHeading(state)}</h1></div><div><span class="kicker">Private invite</span><div class="room-code">${formatCode(state.code)}</div></div></div>
-    <div id="room-status" class="room-status ${state.partner_connected?'live-dot':''}" role="status">${statusText(state,isDemo)}</div><div class="turn-rule"></div>
+    ${licenseCheckUnavailable ? '<p class="notice license-notice" role="status">We could not check the family edition. This room has four free turns.</p>' : ''}<div id="room-status" class="room-status ${state.partner_connected?'live-dot':''}" role="status">${statusText(state,isDemo)}</div><div class="turn-rule"></div>
     <div id="room-body"></div></div></main>${footer()}`;
   app.innerHTML = shell(); bindLinks(); focusHeading();
 
@@ -222,7 +234,7 @@ function downloadStrip(state:RoomState){const frames=state.snapshots.length?stat
 
 function legalPage(kind:'privacy'|'terms'){
   const privacy=kind==='privacy';setMeta(`${privacy?'Privacy':'Terms'} — Family Doodle Relay`,privacy?'How private rooms and license checks handle data.':'Terms for using Family Doodle Relay.','/'+kind);
-  app.innerHTML=`${header()}<main id="main" class="legal route-enter"><article class="narrow"><p class="kicker">Last updated 29 August 2026</p><h1 tabindex="-1">${privacy?'Privacy in plain words':'Terms for family play'}</h1>${privacy?`<p>We made this game for a child and one trusted adult. It does not need a profile.</p><h2>What a room holds</h2><p>The server holds the room code, drawing lines, and guesses in a private temporary database. It removes the room within four hours.</p><h2>What stays on your device</h2><p>This browser keeps your private room key and optional license in local storage. A PNG strip is created and downloaded on your device.</p><h2>Who receives data</h2><p>We do not use ads or behaviour tracking.</p><h2>Children</h2><p>An adult should share the private invite only with someone they trust.</p><h2>Contact</h2><p>For privacy requests, email <a href="mailto:privacy@sociobot.in">privacy@sociobot.in</a>.</p>`:`<p>Use this service only with a person you know. A host may end a room at any time.</p><h2>Use of the game</h2><p>Do not share illegal, abusive, or identifying material. You are responsible for the drawings and guesses you add.</p><h2>Room availability</h2><p>Rooms are temporary. We may remove a room to protect the service or its users. Download a PNG strip before leaving if you want to keep it.</p><h2>One-time purchase</h2><p>The $6 family edition adds eight-turn rooms. Payment opens on Sociobot.</p><h2>No warranty</h2><p>The service is provided as available. These terms do not remove rights that consumer law gives you.</p><h2>Contact</h2><p>For terms or purchase questions, email <a href="mailto:support@sociobot.in">support@sociobot.in</a>.</p>`}</article></main>${footer()}`;bindLinks();focusHeading();
+  app.innerHTML=`${header()}<main id="main" class="legal route-enter"><article class="narrow"><p class="kicker">Last updated 29 August 2026</p><h1 tabindex="-1">${privacy?'Privacy in plain words':'Terms for family play'}</h1>${privacy?`<p>We made this game for a child and one trusted adult. It does not need a profile.</p><h2>What a room holds</h2><p>The server holds the room code, drawing lines, and guesses in a private temporary database. It removes the room within four hours.</p><h2>What stays on your device</h2><p>This browser keeps your private room key and optional license in local storage. A PNG strip is created and downloaded on your device.</p><h2>Who receives data</h2><p>Restoring a license sends its token to <a href="https://api.sociobot.in/api/v1/products/family-doodle-relay/verify">api.sociobot.in</a> to check whether the family edition is active. Sociobot receives the token only for that check. We do not use ads or behaviour tracking.</p><h2>Children</h2><p>An adult should share the private invite only with someone they trust.</p><h2>Contact</h2><p>For privacy requests, email <a href="mailto:privacy@sociobot.in">privacy@sociobot.in</a>.</p>`:`<p>Use this service only with a person you know. A host may end a room at any time.</p><h2>Use of the game</h2><p>Do not share illegal, abusive, or identifying material. You are responsible for the drawings and guesses you add.</p><h2>Room availability</h2><p>Rooms are temporary. We may remove a room to protect the service or its users. Download a PNG strip before leaving if you want to keep it.</p><h2>One-time purchase</h2><p>The $6 family edition adds eight-turn rooms. It is a one-time purchase. Payment opens on Sociobot.</p><p>Sociobot and Dodo are the merchant of record. Sociobot/Dodo handles refunds. A refund revokes the family edition license.</p><h2>No warranty</h2><p>The service is provided as available. These terms do not remove rights that consumer law gives you.</p><h2>Contact</h2><p>For terms or purchase questions, email <a href="mailto:support@sociobot.in">support@sociobot.in</a>.</p>`}</article></main>${footer()}`;bindLinks();focusHeading();
 }
 
 function notFound(){setMeta('Page not found — Family Doodle Relay','Return to Family Doodle Relay and make a private drawing room.','/404');app.innerHTML=`${header()}<main id="main" class="legal"><div class="narrow"><p class="kicker">Error 404</p><h1 tabindex="-1">Page not found</h1><p>The address does not match a room or page.</p><a class="button primary" href="/" data-link>Return to the front page</a></div></main>${footer()}`;bindLinks();focusHeading();}

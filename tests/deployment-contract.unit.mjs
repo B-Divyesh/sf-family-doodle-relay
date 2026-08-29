@@ -78,6 +78,42 @@ test('regression: rejects V8-01 candidate revision before it can crash without r
   );
 });
 
+test('regression V9-01: rejects candidate 4fdc1926 before an unmounted three-replica revision can take traffic', () => {
+  const verifierV9Candidate = appWith({
+    containers: [{
+      name: 'app',
+      image: 'sociobotregistry.azurecr.io/sf-family-doodle-relay:4fdc1926db1f',
+      env: [{ name: 'PORT', value: '8080' }],
+    }],
+    scale: { minReplicas: 1, maxReplicas: 3 },
+    volumes: null,
+  }, 'sf-family-doodle-relay--0000033');
+  verifierV9Candidate.properties.latestReadyRevisionName = 'sf-family-doodle-relay--0000032';
+
+  assert.deepEqual(
+    deploymentContractErrors(
+      verifierV9Candidate,
+      'sociobotregistry.azurecr.io/sf-family-doodle-relay:4fdc1926db1f',
+    ),
+    [
+      'maximum replicas must be 1',
+      'relay-data must be mounted at /data',
+      'relay-data must use the family-doodle-relay-data Azure Files storage',
+      'relay-data mount options must include uid=10001',
+      'relay-data mount options must include gid=10001',
+      'relay-data mount options must include file_mode=0770',
+      'relay-data mount options must include dir_mode=0770',
+      'latest revision is not ready',
+    ],
+  );
+  assert.deepEqual(revisionOwnershipErrors([
+    { name: 'sf-family-doodle-relay--0000032', properties: { active: true, replicas: 1, trafficWeight: 0 } },
+    { name: 'sf-family-doodle-relay--0000033', properties: { active: true, replicas: 1, trafficWeight: 100 } },
+  ], 'sf-family-doodle-relay--0000033'), [
+    'exactly one revision must be active, found 2',
+  ]);
+});
+
 test('@claim:deployment-topology accepts only one ready app instance using the durable relay volume and current image', () => {
   const configuredDeployment = appWith({
     containers: [{

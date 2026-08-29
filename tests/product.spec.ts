@@ -295,6 +295,42 @@ test('@claim:family-edition only a recorded valid license enables eight turns', 
   expect(familyRoom.total_turns).toBe(8);
 });
 
+test('regression V9-02: a family-edition verifier outage starts a free room and lets the player remove the saved license', async ({ page }) => {
+  await page.setExtraHTTPHeaders({ 'X-Forwarded-For': '198.51.100.102' });
+  await page.goto('/');
+  await page.evaluate(() => {
+    localStorage.setItem('sb_license:family-doodle-relay', 'fixture-verifier-unavailable-license');
+    localStorage.setItem('sb_license_check:family-doodle-relay', JSON.stringify({ valid: true, checked: Date.now() }));
+  });
+  await page.goto('/play');
+  await expect(page.getByText('A family edition license is saved on this device.')).toBeVisible();
+  const roomRequest = page.waitForResponse(response => response.url().endsWith('/api/rooms') && response.request().method() === 'POST');
+  await page.getByRole('button', { name: 'Make a private room' }).click();
+  const response = await roomRequest;
+  expect(response.status()).toBe(201);
+  await expect(response.json()).resolves.toMatchObject({ license_check_unavailable: true });
+  await expect(page.getByText('We could not check the family edition. This room has four free turns.')).toBeVisible();
+  await expect(page.getByText('Turn 1 of 4')).toBeVisible();
+
+  await page.goto('/play');
+  await page.getByRole('button', { name: 'Remove saved license' }).click();
+  await expect(page.getByText('Saved license removed. This device will make free four-turn rooms.')).toBeVisible();
+  expect(await page.evaluate(() => [
+    localStorage.getItem('sb_license:family-doodle-relay'),
+    localStorage.getItem('sb_license_check:family-doodle-relay'),
+  ])).toEqual([null, null]);
+});
+
+test('regression V9-03 and V9-04: purchase terms name the merchant and refunds, and privacy names license verification', async ({ page }) => {
+  await page.goto('/terms');
+  await expect(page.getByText('Sociobot and Dodo are the merchant of record.')).toBeVisible();
+  await expect(page.getByText('Sociobot/Dodo handles refunds.')).toBeVisible();
+  await page.goto('/privacy');
+  await expect(page.getByText('Restoring a license sends its token to')).toBeVisible();
+  const recipient = page.getByRole('link', { name: 'api.sociobot.in' });
+  await expect(recipient).toHaveAttribute('href', 'https://api.sociobot.in/api/v1/products/family-doodle-relay/verify');
+});
+
 test('@claim:live-relay two players complete four synced turns', async ({ browser, request }) => {
   const created = await (await request.post('/api/rooms', { data: { paid: false } })).json();
   const joined = await (await request.post('/api/rooms/join', { data: { code: created.code } })).json();
