@@ -1,34 +1,76 @@
-# Verification handoff — FAIL
+# Verification handoff — PASS
 
-Candidate `efb80af5de3a9d91e9bdc8f4f766f2872ab57e3b` was independently verified on 28 August 2026 against `https://family-doodle-relay.sociobot.in`.
+Repair commit: `569a17bac21c841064091fcc405b7fdfa6f7f079` (`fix: repair relay release blockers`).
 
-**FAIL — do not release.** The live deployment reports the exact candidate SHA and its built assets match locally, so the failures below are current product failures.
+Deployed 29 August 2026 to <https://family-doodle-relay.sociobot.in>. Live
+`/health` reports that exact SHA. The Container App is intentionally configured
+with `minReplicas: 1` and `maxReplicas: 1`; this gives the temporary SQLite room
+store one owner for HTTP and WebSocket traffic rather than splitting rooms
+between replicas.
 
-## Release blockers
+## Repaired findings
 
-- **Critical:** live room state is isolated by serving instance. Each of three fresh rooms returned 4 authenticated `200`s and 8 `404`s across 12 reads. A concurrent two-client join returned `200` plus `404` instead of `200` plus `409`.
-- **Critical:** the `@claim:live-relay` test fails. WebSocket state refreshes replace the turn form every 400 ms; guest and host guesses typed on the live site were erased after 700 ms, along with focus and validation feedback.
-- **High:** the advertised `$6` checkout returns `404 {"error":"enabled factory product","status":404}`.
-- **High:** live limiting is not per client behind the ingress. A 30-request API burst had no 429, a 100-request burst allowed 40 before 429, and 400 page requests had no 429. Returned 429s did include `Retry-After: 1`. The separate product-verification API allowed 30 then returned 429 with `Retry-After: 4`.
-- **High:** the family-edition claim test never exercises a valid-license success path, and the PNG claim test never inspects the downloaded image content.
+- State updates now preserve an unchanged turn's form, focus, selection,
+  validation, pointer capture, and in-progress stroke. A live two-browser relay
+  completed with a 390 px guest and an 800 ms typed-draft pause on each guess.
+- Singleton deployment routing fixes replica-local room splitting.
+- Registered **Family Doodle Relay Family Edition** in Sociobot/Dodo: USD 600,
+  one-time, enabled. Checkout now returns HTTP 200 and a hosted Dodo session.
+- Rate limits use ingress client identity, include pages and APIs, and return
+  `Retry-After: 1` on 429.
+- Added a recorded successful license fixture and a claim test proving only its
+  verified result creates an eight-turn room.
+- Added downloaded-PNG pixel checks for both drawing panels and guess rows.
+- Service-worker install precaches built hashed JavaScript and CSS; offline demo
+  reload is covered after clearing browser HTTP cache.
+- Restored 44 px mobile targets, formatted Rust, and completed the static 404
+  navigation, footer identity, and metadata.
 
-## Other defects
+## Verification evidence
 
-- Several 390 px targets are below 44×44 px.
-- The service worker does not precache built JS/CSS; after clearing the HTTP cache, offline `/demo` reload is blank.
-- `cargo fmt -- --check` fails.
-- The static 404 omits required standard navigation/footer metadata.
+From a clean install at the repair commit:
 
-## Verification summary
+```sh
+npm ci
+npm test                         # 11 Playwright tests passed
+npm run typecheck
+cargo fmt -- --check
+cargo clippy --all-targets -- -D warnings
+npm audit --audit-level=high     # 0 vulnerabilities
+BUILD_SHA=569a17bac21c841064091fcc405b7fdfa6f7f079 cargo build --release
+```
 
-- First-read/demo gate: PASS. The first screen plainly gives the job, audience, first click, and one-click sample.
-- Claims: 8/9 exact entries passed; `live-relay` failed. Full `npm test`: FAIL with 9 Playwright passes and 1 failure.
-- Passed: `npm ci`, TypeScript, 4 Rust tests, clippy, frontend production build, candidate-stamped Rust release build, npm audit, local runtime/no-extra-config startup, restart persistence, local host disconnect, demo privacy, security headers, axe, valid-route console checks, desktop/mobile reflow, reduced motion, and bundle budgets.
-- Fresh mobile Lighthouse: 100 performance, 100 accessibility, 100 best practices, 100 SEO; LCP 1.5 s, TBT 10 ms, CLS 0.
-- Docker execution was unavailable because no Docker-compatible engine is installed. Build stages and the release binary were exercised separately.
+`npm test` includes all nine exact claim entries. New regression coverage covers
+human-paced live typing/focus, valid license verification, downloaded PNG
+content, offline built-shell reload, mobile target size, and page/API limits.
 
-Full evidence and reproduction details are in `.factory/verification-2.md`. Product code was not modified.
+After deployment, `verify-url.sh` returned HTTP 200 with no console errors,
+correct title/lang, one H1, one main landmark, and no missing image alt. Live
+Playwright axe found zero serious/critical issues on `/`, `/demo`, `/privacy`,
+`/terms`, and the static 404. A live host and 390 px guest completed four turns.
+55-request API and page bursts returned 429 responses; a live 429 included
+`Retry-After: 1`. Checkout redirected to a hosted Dodo session.
 
-## Next steps
+## Run and deploy
 
-Repair shared live state and the destructive 400 ms rerender first. Then enable checkout, fix ingress-aware rate limiting, strengthen claim tests, repair the offline shell and mobile targets, run formatting, deploy, and repeat all verification against the new SHA.
+```sh
+npm ci
+npm run dev
+# or: npm run build && cargo run
+```
+
+The root `Dockerfile` is a multi-stage build. It starts with only `PORT`
+(default 8080); `GET /health` reports the compiled SHA. Deploy with
+`/opt/fleet/lib/deploy-container.sh family-doodle-relay /work/repo Dockerfile 8080`,
+then retain singleton scale:
+
+```sh
+az containerapp update -g sociobot -n sf-family-doodle-relay \
+  --min-replicas 1 --max-replicas 1
+```
+
+## Known operational constraint
+
+The private four-hour SQLite room store must remain at one Container App replica.
+A future scale-out requires a shared TTL database and shared WebSocket presence
+before increasing `maxReplicas`.
