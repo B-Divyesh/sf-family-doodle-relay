@@ -2,9 +2,9 @@
 
 Draw and guess together in a private two-person room.
 
-Family Doodle Relay is for a child and one trusted adult playing from different places. It gives them four 45-second turns to draw, guess, and add one detail. The final relay downloads as a PNG image.
+Family Doodle Relay is for a child and one trusted adult playing from different places. It gives them four 45-second turns to draw, guess, and add one detail. The final relay downloads as one PNG strip.
 
-There are no public rooms, profiles, ads, or open chat. A room allows two players and closes within four hours. The free game includes four turns and PNG download. The $6 family edition is a one-time purchase for eight-turn rooms; it uses Sociobot checkout and license verification.
+There are no public rooms, profiles, ads, or open chat. A room allows two players and closes within four hours. The free game includes four turns and one PNG strip. The $6 family edition is a one-time purchase for eight-turn rooms. Payment opens on Sociobot.
 
 ## Try the sandbox
 
@@ -43,13 +43,13 @@ docker run --rm -p 8080:8080 -e PORT=8080 family-doodle-relay
 
 ## Architecture and privacy
 
-The browser app uses Vite and TypeScript. Rust, Axum, and a short-lived SQLite room store serve the app. Every non-health route is rate limited per client by the right-most address added by the factory ingress.
+The browser app uses Vite and TypeScript. Rust, Axum, and a short-lived SQLite room store serve the app. Behind the factory proxy, the server uses the last trusted network address to enforce each client’s request limit.
 
-This browser keeps private room keys and an optional purchase license in its storage. The server does not ask for names, ages, email addresses, or profiles. See `/privacy` and `/terms`.
+This browser keeps private room keys and an optional purchase license in local storage. See `/privacy` and `/terms`.
 
 ## Deploy
 
-The factory builds the root `Dockerfile` and supplies `PORT` plus `BUILD_SHA`. Use `./scripts/deploy-container.sh` so the release waits for its single durable room owner and checks the live build identity. `FACTORY_SOCIOBOT_KEY` may be supplied to authenticate server-side license verification; it is optional and never embedded in the image. DNS, billing product registration, and infrastructure stay outside this repository.
+The factory builds the root `Dockerfile` and supplies `PORT` plus `BUILD_SHA`. Use `./scripts/deploy-container.sh` so deployment waits for one ready app instance with persistent room storage, then checks the live build ID. DNS, billing product registration, and infrastructure stay outside this repository.
 
 ## License
 

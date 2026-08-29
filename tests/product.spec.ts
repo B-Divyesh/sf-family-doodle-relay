@@ -67,26 +67,26 @@ test('first-screen sample action opens an isolated resettable query demo in one 
   expect(await page.evaluate(() => ({ local: Object.keys(localStorage), session: Object.keys(sessionStorage), cookies: document.cookie }))).toEqual({ local: [], session: [], cookies: '' });
 });
 
-test('phone layout has no horizontal overflow and keyboard actions work', async ({ page }) => {
+test('phone layout has no horizontal overflow, 44 px controls, and keyboard actions', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/demo');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
   await page.getByRole('button', { name: 'Add a sample mark' }).focus();
   await page.keyboard.press('Enter');
   await expect(page.getByRole('button', { name: 'Undo last line' })).toBeEnabled();
-  const demoLink = await page.getByRole('navigation').getByRole('link', { name: 'Demo' }).boundingBox();
-  expect(demoLink?.width).toBeGreaterThanOrEqual(44);
-  expect(demoLink?.height).toBeGreaterThanOrEqual(44);
-  for (const name of ['Privacy', 'Terms', 'Built by Param Factory external link']) {
-    const box = await page.getByRole('contentinfo').getByRole('link', { name }).boundingBox();
-    expect(box?.width).toBeGreaterThanOrEqual(44);
-    expect(box?.height).toBeGreaterThanOrEqual(44);
-  }
-  await page.goto('/not-a-page');
-  for (const link of await page.getByRole('link').all()) {
-    const box = await link.boundingBox();
-    expect(box?.width).toBeGreaterThanOrEqual(44);
-    expect(box?.height).toBeGreaterThanOrEqual(44);
+  for (const route of ['/', '/demo', '/play', '/privacy', '/terms', '/not-a-page']) {
+    await page.goto(route);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    const controls = page.locator('a, button, input, canvas[tabindex="0"]');
+    const count = await controls.count();
+    expect(count).toBeGreaterThan(0);
+    for (let index = 0; index < count; index += 1) {
+      const control = controls.nth(index);
+      if (!await control.isVisible()) continue;
+      const box = await control.boundingBox();
+      expect(box?.width, `${route} control ${index} is too narrow`).toBeGreaterThanOrEqual(44);
+      expect(box?.height, `${route} control ${index} is too short`).toBeGreaterThanOrEqual(44);
+    }
   }
 });
 
@@ -104,26 +104,58 @@ test('offline demo reload includes the precached built shell', async ({ page, co
   await context.setOffline(false);
 });
 
-test('@claim:demo-sandbox @claim:privacy-defaults sample demo stays isolated and same-origin', async ({ page, context }) => {
-  const offOrigin: string[] = [];
-  page.on('request', request => { if (new URL(request.url()).origin !== 'http://127.0.0.1:8080') offOrigin.push(request.url()); });
+test('@claim:demo-sandbox sample demo leaves real browser data untouched and avoids APIs', async ({ page, context }) => {
+  const requests: string[] = [];
+  page.on('request', request => requests.push(request.url()));
+  await page.goto('/');
+  await page.evaluate(() => {
+    localStorage.setItem('relay:room:REALROOM1234', JSON.stringify({ code: 'REALROOM1234', token: 'private-room-token', role: 'host' }));
+    localStorage.setItem('sb_license:family-doodle-relay', 'real-license-token');
+    localStorage.setItem('sb_license_check:family-doodle-relay', JSON.stringify({ valid: true, checked: Date.now() }));
+    sessionStorage.setItem('real-session-state', 'leave-this-alone');
+    document.cookie = 'real-preference=paper; path=/';
+  });
+  const before = await page.evaluate(() => ({ local: { ...localStorage }, session: { ...sessionStorage }, cookie: document.cookie }));
   await page.goto('/demo');
   await expect(page.getByText('Demo — sample data, nothing is saved')).toBeVisible();
   await expect(page.getByText('A house at sea')).toBeVisible();
   await page.getByRole('button', { name: 'Add a sample mark' }).click();
-  expect(await page.evaluate(() => Object.keys(localStorage).filter(key => key.startsWith('demo:')))).toEqual([]);
-  expect(offOrigin).toEqual([]);
-  await context.setOffline(true);
+  await page.getByRole('button', { name: 'Finish this turn' }).click();
+  await expect(page.getByRole('heading', { name: 'Your relay is finished' })).toBeVisible();
   await page.getByRole('button', { name: 'Reset demo' }).click();
   await expect(page.getByText('A house at sea')).toBeVisible();
-  await context.setOffline(false);
-  await page.goto('/');
-  await expect(page.getByText('Public rooms or strangers')).toBeVisible();
-  await expect(page.getByText('Ads or behaviour tracking')).toBeVisible();
-  expect(await context.cookies()).toEqual([]);
+  await page.getByRole('link', { name: 'Start for real' }).click();
+  await expect(page).toHaveURL('/');
+  expect(await page.evaluate(() => ({ local: { ...localStorage }, session: { ...sessionStorage }, cookie: document.cookie }))).toEqual(before);
+  expect(await context.cookies()).toHaveLength(1);
+  expect(requests.every(url => new URL(url).origin === 'http://127.0.0.1:8080')).toBe(true);
+  expect(requests.some(url => new URL(url).pathname.startsWith('/api/'))).toBe(false);
 });
 
-test('@claim:browser-storage room credentials stay in this browser storage', async ({ page, context }) => {
+test('@claim:privacy-defaults product has no account, discovery, advertising, tracking, or chat surface', async ({ page, context, request }) => {
+  const requests: string[] = [];
+  page.on('request', entry => requests.push(entry.url()));
+  for (const route of ['/', '/demo', '/play', '/privacy', '/terms']) {
+    await page.goto(route);
+    const controls = await page.locator('a, button, input, textarea, select').evaluateAll(elements => elements.map(element => `${element.getAttribute('href') || ''} ${element.getAttribute('name') || ''} ${element.getAttribute('aria-label') || ''} ${element.textContent || ''}`).join('\n'));
+    expect(controls).not.toMatch(/sign\s*in|log\s*in|register|profile|follower|chat|discover|advert/i);
+  }
+  await page.goto('/demo');
+  await page.getByRole('button', { name: 'Add a sample mark' }).click();
+  await page.getByRole('button', { name: 'Finish this turn' }).click();
+  for (const route of ['/api/accounts', '/api/login', '/api/profiles', '/api/rooms/public', '/api/chat', '/api/ads', '/api/analytics']) {
+    expect((await request.get(route)).status(), `${route} must reject access`).toBeGreaterThanOrEqual(400);
+  }
+  expect(await context.cookies()).toEqual([]);
+  expect(requests.every(url => new URL(url).origin === 'http://127.0.0.1:8080')).toBe(true);
+});
+
+test('@claim:browser-storage room credentials and a restored license stay in local storage only', async ({ page, context }) => {
+  await page.route('https://api.sociobot.in/api/v1/products/family-doodle-relay/verify**', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ valid: true }),
+  }));
   await page.goto('/play');
   await page.getByRole('button', { name: 'Make a private room' }).click();
   await expect(page).toHaveURL(/\/room\/[A-Z0-9]{12}$/);
@@ -131,6 +163,12 @@ test('@claim:browser-storage room credentials stay in this browser storage', asy
   expect(keys).toHaveLength(1);
   const credentials = await page.evaluate(key => JSON.parse(localStorage.getItem(key) || 'null'), keys[0]);
   expect(credentials).toMatchObject({ role: 'host', code: expect.any(String), token: expect.any(String) });
+  await page.goto('/');
+  await page.getByLabel('Paste your license').fill('fixture-valid-family-edition-license');
+  await page.getByRole('button', { name: 'Restore the family edition' }).click();
+  await expect(page.getByText('Family edition is ready on this device.')).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem('sb_license:family-doodle-relay'))).toBe('fixture-valid-family-edition-license');
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('sb_license_check:family-doodle-relay') || 'null'))).toMatchObject({ valid: true, checked: expect.any(Number) });
   expect(await page.evaluate(() => Object.keys(sessionStorage))).toEqual([]);
   expect(await context.cookies()).toEqual([]);
 });
@@ -207,7 +245,7 @@ test('@claim:one-time-price page states the one-time price and uses Sociobot che
   await expect(page.getByText('$6 once, no subscription')).toBeVisible();
   const buy = page.getByRole('link', { name: 'Buy the family edition' });
   await expect(buy).toHaveAttribute('href', 'https://api.sociobot.in/api/v1/products/family-doodle-relay/checkout');
-  await expect(page.getByText('One-time purchase. Sociobot is the merchant of record.')).toBeVisible();
+  await expect(page.getByText('One-time purchase. Payment opens on Sociobot.')).toBeVisible();
 });
 
 test('@claim:family-edition only a recorded valid license enables eight turns', async ({ request }) => {
@@ -252,6 +290,40 @@ test('@claim:live-relay two players complete four synced turns', async ({ browse
   await host.getByRole('button', { name: 'Send your guess' }).click();
   await expect(host.getByRole('heading', { name: 'Your relay is finished' })).toBeVisible();
   await expect(guest.getByText('A home riding a wave')).toBeVisible();
+  await hostContext.close();
+  await guestContext.close();
+});
+
+test('@claim:free-core four no-license turns and a PNG strip never open checkout', async ({ browser, request }) => {
+  const created = await (await request.post('/api/rooms', { data: {} })).json();
+  const joined = await (await request.post('/api/rooms/join', { data: { code: created.code } })).json();
+  const hostContext = await browser.newContext({ extraHTTPHeaders: { 'X-Forwarded-For': '198.51.100.61' } });
+  const guestContext = await browser.newContext({ extraHTTPHeaders: { 'X-Forwarded-For': '198.51.100.62' } });
+  const host = await hostContext.newPage();
+  const guest = await guestContext.newPage();
+  const checkoutRequests: string[] = [];
+  host.on('request', entry => { if (entry.url().includes('/checkout')) checkoutRequests.push(entry.url()); });
+  guest.on('request', entry => { if (entry.url().includes('/checkout')) checkoutRequests.push(entry.url()); });
+  await host.goto('/');
+  await host.evaluate(({ code, value }) => localStorage.setItem(`relay:room:${code}`, JSON.stringify(value)), { code: created.code, value: created });
+  await guest.goto('/');
+  await guest.evaluate(({ code, value }) => localStorage.setItem(`relay:room:${code}`, JSON.stringify(value)), { code: created.code, value: joined });
+  await Promise.all([host.goto(`/room/${created.code}`), guest.goto(`/room/${created.code}`)]);
+  await expect(host.getByText('Both players are here')).toBeVisible();
+  await expect(host.getByText('Turn 1 of 4')).toBeVisible();
+  await host.getByRole('button', { name: 'Add a sample mark' }).click();
+  await host.getByRole('button', { name: 'Finish this turn' }).click();
+  await guest.getByLabel('Your guess').fill('A tiny mountain home');
+  await guest.getByRole('button', { name: 'Send your guess' }).click();
+  await guest.getByRole('button', { name: 'Add a sample mark' }).click();
+  await guest.getByRole('button', { name: 'Finish this turn' }).click();
+  await host.getByLabel('Your guess').fill('A home on a wave');
+  await host.getByRole('button', { name: 'Send your guess' }).click();
+  await expect(host.getByRole('heading', { name: 'Your relay is finished' })).toBeVisible();
+  const downloadEvent = host.waitForEvent('download');
+  await host.getByRole('button', { name: 'Download the PNG strip' }).click();
+  expect((await downloadEvent).suggestedFilename()).toBe('family-doodle-relay.png');
+  expect(checkoutRequests).toEqual([]);
   await hostContext.close();
   await guestContext.close();
 });

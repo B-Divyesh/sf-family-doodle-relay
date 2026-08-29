@@ -79,6 +79,7 @@ input[aria-invalid='true'] { border-color: var(--danger); }
 .not-list li::before { content: '×'; color: var(--red); font-weight: 900; margin-right: 12px; }
 .price-line { font-family: Georgia, 'Times New Roman', serif; font-size: 42px; margin: 16px 0; }
 .license-panel { border-left: 4px solid var(--ink); padding-left: 28px; }
+.license-panel a:not(.button) { display: inline-flex; align-items: center; min-height: 44px; }
 .site-footer { padding: 40px max(20px, calc((100vw - 1180px) / 2)); display: grid; grid-template-columns: 1fr auto; gap: 24px; border-top: 4px solid var(--ink); font-size: 14px; }
 .footer-links { display: flex; flex-wrap: wrap; gap: 8px; }
 .footer-links a { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; }

@@ -43,7 +43,7 @@ test('rejects the verifier topology with three owners and no durable room store'
   );
 });
 
-test('@claim:deployment-topology accepts one ready owner using the durable relay volume and current image', () => {
+test('@claim:deployment-topology accepts only one ready app instance using the durable relay volume and current image', () => {
   const configuredDeployment = appWith({
     containers: [{
       name: 'app',

@@ -35,8 +35,8 @@ Audited 29 August 2026. Counts use whitespace-separated words. The table include
 | Send its private invite to one person. | 7 | Pass |
 | Take four turns | 3 | Pass |
 | Draw, guess, then add one surprising detail. | 7 | Pass |
-| Save the strip | 3 | Pass |
-| Download the finished relay as a PNG image. | 8 | Pass |
+| Save the PNG strip | 4 | Pass |
+| Download the finished relay as one PNG strip. | 8 | Pass |
 | Private rooms and data | 4 | Pass |
 | Rooms disappear from the server within four hours. | 8 | Pass |
 | Downloading a PNG strip does not send it to another service. | 11 | Pass |
@@ -48,10 +48,10 @@ Audited 29 August 2026. Counts use whitespace-separated words. The table include
 | Family edition: eight-turn rooms | 4 | Pass |
 | $6 once | 2 | Pass |
 | Eight-turn rooms are included. | 4 | Pass |
-| Core four-turn play and PNG downloads stay free. | 8 | Pass |
+| Core four-turn play and PNG strips stay free. | 8 | Pass |
 | Buy the family edition | 4 | Pass |
 | One-time purchase. | 2 | Pass |
-| Sociobot is the merchant of record. | 6 | Pass |
+| Payment opens on Sociobot. | 4 | Pass |
 | Already bought it? | 3 | Pass |
 | Paste your license | 3 | Pass |
 | Restore the family edition | 4 | Pass |
