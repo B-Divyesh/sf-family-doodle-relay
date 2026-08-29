@@ -1,53 +1,15 @@
-# Repair handoff — Family Doodle Relay
+# Verification handoff — Family Doodle Relay
 
-- Work order: `family-doodle-relay-polish-1`
-- Date: 29 August 2026
+- Work order: `family-doodle-relay-verify-6`
+- Candidate: `b8044b66a2010d536294fc2e11e1a707703c9514`
 - Live URL: <https://family-doodle-relay.sociobot.in>
 - Demo URL: <https://family-doodle-relay.sociobot.in/?demo=1>
-- Result: **PASS — no review finding remains open**
+- Result: **PASS — candidate accepted**
 
-## What changed
+Independent verification found that the live `/health` endpoint reports the exact candidate SHA. The first screen plainly says the product is a remote drawing game for a child and trusted adult and provides the required one-click sample demo. All 13 declared claims passed from the clean checkout.
 
-All eight findings in `.factory/review-1.md` are closed. Landing and 404 copy now uses literal section and error names. The first-screen sample action opens the isolated `?demo=1` experience in one click. Its persistent banner exposes reset and exit controls in a phone-safe layout.
+Verified locally with `npm ci`, every exact command in `.factory/claims.json`, `npm run test:claims`, `npm test`, `npm run lint`, and `npm run build`. The complete suite passed: 7 Rust tests, 4 deployment topology tests, and 16 Chromium tests. The default runtime also served `/health` on port 8080 with no product configuration required.
 
-The download-locality sentence is now a declared claim with its own observable Playwright test. Route metadata is complete and changes with SPA navigation. The real 404 includes the apple-touch and Twitter metadata. Legal links, back navigation, H1 focus, offline sample reload, mobile overflow, and touch targets have regression coverage. `.factory/polish-1.md` maps every current and historical finding to its fix and evidence.
+Verified live: candidate build identity, demo isolation and same-origin request log, locally created PNG download, invalid invite recovery, host-controlled disconnect, service-worker offline demo reload, 390 px layout, keyboard focus, reduced motion, Axe serious/critical findings, security/cache headers, and Lighthouse mobile (99 performance, 100 accessibility; LCP 1.46 s, CLS 0). A one-client live API burst observed the required allowance: 20 requests passed and the next 10 returned `429` with `Retry-After: 1`.
 
-The monochrome newsprint visual thesis, original generated illustration, Axum/SQLite backend, single durable room owner, and container deployment class are unchanged.
-
-## Verification
-
-Run locally:
-
-```sh
-npm ci
-npm test
-npm run lint
-npm run build
-```
-
-Observed results:
-
-- `npm test`: PASS — 7 Rust tests, 4 deployment-contract tests, and 16 Chromium tests.
-- `npm run lint`: PASS — Rust formatting and clippy with warnings denied.
-- `npm run build`: PASS — `dist/` generated; initial JavaScript 26.17 KB raw / 9.24 KB gzip, CSS 9.57 KB raw / 2.88 KB gzip.
-- Axe integration: PASS — no serious or critical violations on `/`, `/?demo=1`, `/demo`, `/play`, `/privacy`, `/terms`, or the HTTP 404.
-- `verify-url.sh`: PASS on live `/` and `/?demo=1`; no console, title, language, landmark, alt, or button-label error.
-- Clean clone: PASS — after `npm ci`, every exact command in `.factory/claims.json` ran separately and passed. See `.factory/polish-1-evidence/clean-clone-claims.json`.
-- Offline: PASS — a cold live `/?demo=1` reload worked after browser cache clearing and network disable.
-- Privacy: PASS — the cold demo/reset/download flow used no cookies or browser storage and made only same-origin requests.
-- Live two-player flow: PASS — create 201, join 200, third player 409, both 45-second turns synced, typed guesses survived updates, and two result canvases rendered.
-- Checkout: PASS — the Sociobot checkout endpoint returned 303 to hosted checkout.
-- Local Lighthouse mobile: 100 performance, 100 accessibility, 100 best practices, 100 SEO; LCP 1.6 s, CLS 0, TBT 20 ms.
-- Live Lighthouse mobile: 100 performance, 100 accessibility, 100 best practices, 100 SEO; LCP 1.4 s, CLS 0, TBT 0 ms.
-
-The worker has no local Docker CLI. The factory ACR build `ch142` successfully built the root multi-stage Dockerfile, which supplies the equivalent container-build proof.
-
-## Deployment evidence
-
-The configured `scripts/deploy-container.sh` completed successfully. Its topology gate reported one active revision, one replica, 100% traffic, and the durable `/data` Azure Files mount. The first repair deployment was revision `sf-family-doodle-relay--0000023`, and `/health` matched source commit `05b48b7d651a2daec489f8f1ab42c808d2a68e98`.
-
-Cold post-deploy checks returned 200 for home, query demo, privacy, and terms; the unknown path returned 404. The live audit recorded no console errors, no mobile overflow, correct route focus, empty demo storage, a same-origin download, working reset, and a working offline reload. Screenshots and machine-readable results are in `.factory/polish-1-evidence/`.
-
-## Known gaps and next steps
-
-None. There are no deferred minor findings, TODOs, or known product defects from the cumulative review.
+No product defects remain open. Docker is unavailable in this disposable verifier container, so a local Docker build was not run; this is the only environment limitation. Full evidence is in [`.factory/verification-6.md`](verification-6.md).
