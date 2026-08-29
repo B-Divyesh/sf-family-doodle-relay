@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { assertDeploymentContract, deploymentContractErrors } from '../scripts/deployment-contract.mjs';
+import {
+  assertDeploymentContract,
+  assertRevisionOwnership,
+  deploymentContractErrors,
+  revisionOwnershipErrors,
+} from '../scripts/deployment-contract.mjs';
 
 const image = 'sociobotregistry.azurecr.io/sf-family-doodle-relay:repairsha123';
 
@@ -60,6 +65,15 @@ test('@claim:deployment-topology accepts one ready owner using the durable relay
     replicas: 1,
     dataMount: '/data',
   });
+  assert.deepEqual(assertRevisionOwnership([
+    { name: 'relay--old', properties: { active: false, replicas: 0, trafficWeight: 0 } },
+    { name: 'sf-family-doodle-relay--repair', properties: { active: true, replicas: 1, trafficWeight: 100 } },
+  ], 'sf-family-doodle-relay--repair'), {
+    revision: 'sf-family-doodle-relay--repair',
+    activeRevisions: 1,
+    replicas: 1,
+    trafficWeight: 100,
+  });
 });
 
 test('rejects an unready revision or a stale image', () => {
@@ -82,5 +96,15 @@ test('rejects an unready revision or a stale image', () => {
   assert.deepEqual(deploymentContractErrors(deployment, 'registry.invalid/new:image'), [
     'app image must be registry.invalid/new:image',
     'latest revision is not ready',
+  ]);
+});
+
+test('rejects an old active owner even when it has zero traffic', () => {
+  const revisions = [
+    { name: 'relay--old', properties: { active: true, replicas: 1, trafficWeight: 0 } },
+    { name: 'relay--repair', properties: { active: true, replicas: 1, trafficWeight: 100 } },
+  ];
+  assert.deepEqual(revisionOwnershipErrors(revisions, 'relay--repair'), [
+    'exactly one revision must be active, found 2',
   ]);
 });

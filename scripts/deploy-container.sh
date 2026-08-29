@@ -44,6 +44,24 @@ for _ in $(seq 1 40); do
 done
 [ "$deployment_ready" = true ] || { echo "The durable single-owner deployment did not become ready." >&2; exit 1; }
 
+echo "== deactivate superseded room owners"
+while IFS= read -r old_revision; do
+  [ -z "$old_revision" ] && continue
+  az containerapp revision deactivate --resource-group "$resource_group" --name "$app_name" --revision "$old_revision" --only-show-errors -o none
+done < <(az containerapp revision list --resource-group "$resource_group" --name "$app_name" --query "[?properties.active && name!='${latest_revision}'].name" -o tsv)
+
+ownership_ready=false
+for _ in $(seq 1 30); do
+  revisions_json="$(az containerapp revision list --resource-group "$resource_group" --name "$app_name" -o json)"
+  if ownership="$(printf '%s' "$revisions_json" | node "$repo_dir/scripts/deployment-contract.mjs" --revisions --expected-revision "$latest_revision" 2>/dev/null)"; then
+    ownership_ready=true
+    echo "$ownership"
+    break
+  fi
+  sleep 5
+done
+[ "$ownership_ready" = true ] || { echo "Production did not converge to one active room owner." >&2; exit 1; }
+
 echo "== verify live build identity"
 identity_ready=false
 for _ in $(seq 1 30); do

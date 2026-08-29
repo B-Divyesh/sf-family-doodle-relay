@@ -60,12 +60,45 @@ export function assertDeploymentContract(app, expectedImage = '') {
   };
 }
 
+export function revisionOwnershipErrors(revisions, expectedRevision) {
+  const errors = [];
+  const active = revisions.filter(revision => revision?.properties?.active);
+  if (active.length !== 1) {
+    errors.push(`exactly one revision must be active, found ${active.length}`);
+  }
+  const owner = active.find(revision => revision.name === expectedRevision);
+  if (!owner) {
+    errors.push(`ready revision ${expectedRevision} must be the active owner`);
+  } else {
+    if (owner.properties.replicas !== 1) {
+      errors.push('active owner must have exactly one replica');
+    }
+    if (owner.properties.trafficWeight !== 100) {
+      errors.push('active owner must receive 100 percent of traffic');
+    }
+  }
+  return errors;
+}
+
+export function assertRevisionOwnership(revisions, expectedRevision) {
+  const errors = revisionOwnershipErrors(revisions, expectedRevision);
+  if (errors.length) {
+    throw new Error(`revision ownership failed: ${errors.join('; ')}`);
+  }
+  return { revision: expectedRevision, activeRevisions: 1, replicas: 1, trafficWeight: 100 };
+}
+
 async function main() {
   const expectedImageIndex = process.argv.indexOf('--expected-image');
   const expectedImage = expectedImageIndex >= 0 ? process.argv[expectedImageIndex + 1] : '';
+  const expectedRevisionIndex = process.argv.indexOf('--expected-revision');
+  const expectedRevision = expectedRevisionIndex >= 0 ? process.argv[expectedRevisionIndex + 1] : '';
   let input = '';
   for await (const chunk of process.stdin) input += chunk;
-  const summary = assertDeploymentContract(JSON.parse(input), expectedImage);
+  const parsed = JSON.parse(input);
+  const summary = process.argv.includes('--revisions')
+    ? assertRevisionOwnership(parsed, expectedRevision)
+    : assertDeploymentContract(parsed, expectedImage);
   process.stdout.write(`${JSON.stringify(summary)}\n`);
 }
 
