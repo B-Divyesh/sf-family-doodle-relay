@@ -1,0 +1,17 @@
+{
+  "checked_at": "2026-08-29T11:31Z",
+  "candidate": "50ab575d393746e48b730dac0a52ad029ffdad3b",
+  "rooms": [
+    {"create": 201, "reads": [404, 404, 200, 404, 200, 200], "join": 200},
+    {"create": 201, "reads": [404, 200, 404, 200, 200, 404], "join": 200},
+    {"create": 201, "reads": [404, 200, 404, 200, 200, 404], "join": 200}
+  ],
+  "health": [
+    {"status": 200, "build_sha": "50ab575d393746e48b730dac0a52ad029ffdad3b"},
+    {"status": 200, "build_sha": "50ab575d393746e48b730dac0a52ad029ffdad3b"},
+    {"status": 200, "build_sha": "50ab575d393746e48b730dac0a52ad029ffdad3b"},
+    {"status": 200, "build_sha": "50ab575d393746e48b730dac0a52ad029ffdad3b"},
+    {"status": 200, "build_sha": "50ab575d393746e48b730dac0a52ad029ffdad3b"},
+    {"status": 200, "build_sha": "50ab575d393746e48b730dac0a52ad029ffdad3b"}
+  ]
+}

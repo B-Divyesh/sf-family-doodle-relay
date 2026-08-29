@@ -1,0 +1,8 @@
+{
+  "checked_at": "2026-08-29T11:30Z",
+  "create_status": 201,
+  "invalid_input_message": "The invite code has 12 letters and numbers. Check it and try again.",
+  "valid_join_status_from_separate_browser": 404,
+  "shown_message": "Room not found. Check the code and ask the host to keep the room open.",
+  "concurrent_join_probe": {"200": 1, "404": 8, "409": 3}
+}

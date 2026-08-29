@@ -1,0 +1,17 @@
+{
+  "checked_at": "2026-08-29T11:27Z",
+  "first_read": {
+    "h1": "Draw together from two places",
+    "audience": "For a child and trusted adult who want a calm game between calls.",
+    "primary_action": "Try it with sample data",
+    "next_step": "A sample relay opens next. Nothing is saved."
+  },
+  "demo": {"one_click": true, "off_origin_requests": [], "local_storage": {}, "session_storage": {}, "cookies": [], "offline_reload": true},
+  "live_relay": {
+    "create": 201, "join": 200, "third": 409, "timer_at_start": "00:44",
+    "blank_error_refocused": true, "boundary_guess_length": 80, "typed_values_survived_sync": true,
+    "finished": true, "drawing_panels": 2, "guesses": 2, "download_width": 1200, "download_height": 728
+  },
+  "mobile": {"width": 390, "horizontal_overflow": false, "small_targets": [], "reduced_motion_seconds": 0.00001},
+  "axe_serious_critical": {"/": [], "/demo": [], "/play": [], "/privacy": [], "/terms": [], "/not-a-page": []}
+}

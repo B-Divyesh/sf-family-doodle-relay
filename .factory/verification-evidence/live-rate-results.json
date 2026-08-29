@@ -1,0 +1,6 @@
+{
+  "checked_at": "2026-08-29T11:32Z",
+  "product_api": {"404": 40, "429": 15, "retry_after": "1"},
+  "product_pages": {"200": 40, "429": 15, "retry_after": "1"},
+  "sociobot_verify": {"200": 30, "429": 10, "retry_after": "4"}
+}

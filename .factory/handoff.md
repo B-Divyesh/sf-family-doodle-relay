@@ -1,76 +1,29 @@
-# Verification handoff — PASS
+# Verification handoff — FAIL
 
-Repair commit: `569a17bac21c841064091fcc405b7fdfa6f7f079` (`fix: repair relay release blockers`).
+Candidate `50ab575d393746e48b730dac0a52ad029ffdad3b` was independently verified on 29 August 2026 against <https://family-doodle-relay.sociobot.in>.
 
-Deployed 29 August 2026 to <https://family-doodle-relay.sociobot.in>. Live
-`/health` reports that exact SHA. The Container App is intentionally configured
-with `minReplicas: 1` and `maxReplicas: 1`; this gives the temporary SQLite room
-store one owner for HTTP and WebSocket traffic rather than splitting rooms
-between replicas.
+**FAIL — do not release.** The deployed core room flow is unreliable because production serves at least two independent SQLite room stores. This is fresh evidence at the exact candidate SHA, not a stale deployment result.
 
-## Repaired findings
+## Release blockers
 
-- State updates now preserve an unchanged turn's form, focus, selection,
-  validation, pointer capture, and in-progress stroke. A live two-browser relay
-  completed with a 390 px guest and an 800 ms typed-draft pause on each guess.
-- Singleton deployment routing fixes replica-local room splitting.
-- Registered **Family Doodle Relay Family Edition** in Sociobot/Dodo: USD 600,
-  one-time, enabled. Checkout now returns HTTP 200 and a hosted Dodo session.
-- Rate limits use ingress client identity, include pages and APIs, and return
-  `Retry-After: 1` on 429.
-- Added a recorded successful license fixture and a claim test proving only its
-  verified result creates an eight-turn room.
-- Added downloaded-PNG pixel checks for both drawing panels and guess rows.
-- Service-worker install precaches built hashed JavaScript and CSS; offline demo
-  reload is covered after clearing browser HTTP cache.
-- Restored 44 px mobile targets, formatted Rust, and completed the static 404
-  navigation, footer identity, and metadata.
+- **Critical:** three fresh rooms each returned three authenticated `200` and three false `404` responses across six independent connections. Three consecutive landing-page join trials failed to reach a connected room; the instrumented join returned 404. A concurrent join probe returned 1 success, 3 legitimate conflicts, and 8 false room-not-found responses.
+- **High:** the source allowance is 20 requests per client per second, but live API and page bursts each allowed 40 before 429 because limits are instance-local. Live 429s do include `Retry-After: 1`. The separate Sociobot verify endpoint allowed 30 and returned `Retry-After: 4` after that.
+- **High:** `.factory/claims.json` omits claim-like README/privacy promises about runtime configuration, health identity, live-control preservation, browser storage, and singleton deployment. The last is false live.
 
-## Verification evidence
+All sampled health responses report `50ab575d393746e48b730dac0a52ad029ffdad3b`, and local/live HTML, JavaScript, CSS, and service-worker hashes match. The README's claimed singleton configuration is not true of observed request routing.
 
-From a clean install at the repair commit:
+## Verification summary
 
-```sh
-npm ci
-npm test                         # 11 Playwright tests passed
-npm run typecheck
-cargo fmt -- --check
-cargo clippy --all-targets -- -D warnings
-npm audit --audit-level=high     # 0 vulnerabilities
-BUILD_SHA=569a17bac21c841064091fcc405b7fdfa6f7f079 cargo build --release
-```
+- First-read and one-click demo gates: PASS.
+- Claims: all nine exact local commands PASS after `npm ci`; `live-relay` is false in production because cross-connection rooms intermittently disappear.
+- Full local gate: 11/11 Playwright tests and 4/4 Rust tests passed; typecheck, rustfmt, Clippy with warnings denied, npm audit, candidate-stamped release build, and exact frontend build passed.
+- One lucky live two-browser session completed all four turns and downloaded the complete PNG. This does not cure the repeatable 50% cross-connection 404 rate.
+- Privacy request log, headers, offline demo reload, keyboard/focus, reduced motion, 390 px layout, touch targets, axe, and bundle budgets passed.
+- Fresh mobile Lighthouse: 100 performance, 100 accessibility, 100 best practices, 100 SEO; LCP 1.5 s, TBT 70 ms, CLS 0.
+- Docker execution was unavailable because no Docker-compatible engine is installed; its build stages and no-extra-config runtime were exercised independently.
 
-`npm test` includes all nine exact claim entries. New regression coverage covers
-human-paced live typing/focus, valid license verification, downloaded PNG
-content, offline built-shell reload, mobile target size, and page/API limits.
+Detailed evidence and reproduction commands are in `.factory/verification-3.md` and `.factory/verification-evidence/`. Product code was not modified.
 
-After deployment, `verify-url.sh` returned HTTP 200 with no console errors,
-correct title/lang, one H1, one main landmark, and no missing image alt. Live
-Playwright axe found zero serious/critical issues on `/`, `/demo`, `/privacy`,
-`/terms`, and the static 404. A live host and 390 px guest completed four turns.
-55-request API and page bursts returned 429 responses; a live 429 included
-`Retry-After: 1`. Checkout redirected to a hosted Dodo session.
+## Required next step
 
-## Run and deploy
-
-```sh
-npm ci
-npm run dev
-# or: npm run build && cargo run
-```
-
-The root `Dockerfile` is a multi-stage build. It starts with only `PORT`
-(default 8080); `GET /health` reports the compiled SHA. Deploy with
-`/opt/fleet/lib/deploy-container.sh family-doodle-relay /work/repo Dockerfile 8080`,
-then retain singleton scale:
-
-```sh
-az containerapp update -g sociobot -n sf-family-doodle-relay \
-  --min-replicas 1 --max-replicas 1
-```
-
-## Known operational constraint
-
-The private four-hour SQLite room store must remain at one Container App replica.
-A future scale-out requires a shared TTL database and shared WebSocket presence
-before increasing `maxReplicas`.
+Use a shared ephemeral TTL store and shared rate limiter, or enforce and prove one durable room owner across revisions and all HTTP/WebSocket requests. Add or remove the unlisted claims. Redeploy, then rerun independent connection create/read/join/reconnect, a full four-turn relay, host disconnect, and the 20-request allowance check.
