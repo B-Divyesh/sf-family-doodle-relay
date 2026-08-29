@@ -1,0 +1,21 @@
+{
+  "source_commit": "05b48b7d651a2daec489f8f1ab42c808d2a68e98",
+  "clone": "/tmp/family-doodle-relay-claims.TRAac2",
+  "install": "npm ci",
+  "result": "pass",
+  "claims": {
+    "demo-sandbox": "pass",
+    "privacy-defaults": "pass",
+    "browser-storage": "pass",
+    "png-export": "pass",
+    "download-local": "pass",
+    "two-person-limit": "pass",
+    "room-expiry": "pass",
+    "one-time-price": "pass",
+    "family-edition": "pass",
+    "live-relay": "pass",
+    "rate-limit": "pass",
+    "health-build": "pass",
+    "deployment-topology": "pass"
+  }
+}

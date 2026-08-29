@@ -1,0 +1,51 @@
+{
+  "checked_at": "2026-08-29T16:03:18Z",
+  "url": "https://family-doodle-relay.sociobot.in",
+  "build_sha": "05b48b7d651a2daec489f8f1ab42c808d2a68e98",
+  "home_status": 200,
+  "demo": {
+    "url": "https://family-doodle-relay.sociobot.in/?demo=1",
+    "status": 200,
+    "request_origins": ["https://family-doodle-relay.sociobot.in"],
+    "local_storage_keys": [],
+    "session_storage_keys": [],
+    "cookies": "",
+    "reset_restored_sample": true,
+    "download_filename": "family-doodle-relay.png",
+    "offline_reload_heading": "Add one surprising detail"
+  },
+  "routing": {
+    "privacy_status": 200,
+    "terms_status": 200,
+    "privacy_title": "Privacy — Family Doodle Relay",
+    "privacy_h1_focused": true,
+    "back_navigation_h1_focused": true,
+    "unknown_status": 404,
+    "unknown_title": "Page not found — Family Doodle Relay",
+    "unknown_heading": "Page not found",
+    "unknown_metadata_complete": true
+  },
+  "mobile": {
+    "viewport": "390x844",
+    "horizontal_overflow_px": 0,
+    "demo_banner_targets_px": [[171, 44], [171, 44]]
+  },
+  "live_relay": {
+    "create_status": 201,
+    "join_status": 200,
+    "third_player_status": 409,
+    "starting_timer": "00:44",
+    "guest_text_preserved": "A little mountain home",
+    "host_text_preserved": "A home riding a wave",
+    "finished": true,
+    "result_canvases": 2
+  },
+  "checkout_status": 303,
+  "deployment": {
+    "revision": "sf-family-doodle-relay--0000023",
+    "active_revisions": 1,
+    "replicas": 1,
+    "data_mount": "/data"
+  },
+  "console_errors": []
+}
