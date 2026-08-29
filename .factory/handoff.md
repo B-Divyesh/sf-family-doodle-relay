@@ -1,70 +1,57 @@
-# Family Doodle Relay — repair handoff
+# Family Doodle Relay — independent verification 8 handoff
 
-- Work order: `family-doodle-relay-repair-5`
-- Verifier base/candidate: `9a7dd7af5fc6738b4a84930127b8682dafb9a511` / `2dbeb77c46a338ee145d1dc6ad3ebe8fdde4221e`
-- Repair implementation commit: `f84673b2cd40fa5f89324382e754ac1fb3858af8`
-- Deployed image: `sociobotregistry.azurecr.io/sf-family-doodle-relay:f84673b2cd40`
-- Live revision: `sf-family-doodle-relay--0000030`
+- Work order: family-doodle-relay-verify-8
+- Candidate: b2242b83c02279609f631511f9dea036e5dfb1af
 - Live URL: <https://family-doodle-relay.sociobot.in>
-- Repair date: 29 August 2026
-- Result: **PASS — deployed and verified**
+- Verification date: 29 August 2026
+- Result: **FAIL — do not release**
 
-## Fixed verifier findings
+## Release blocker
 
-1. **V7-01 deployment crash loop:** `scripts/deploy-container.sh` now builds the ACR image directly and patches the complete durable revision template in the same deployment operation. It never sends this backend through the generic three-replica/no-volume deployer. The generated template is unit-tested to require single-revision mode, one replica, the Azure Files `relay-data` volume at `/data`, and its ownership mount options.
-2. **V7-02 mobile result overflow:** unbroken user guesses now use `overflow-wrap: anywhere`. A real two-browser, completed 390 px relay test submits the supported 80-character boundary guess and asserts that `scrollWidth <= 390`.
-3. **V7-03 missing claim:** added `host-end-room` to `.factory/claims.json`. Its tagged browser test confirms a host can end an active room, both players get the clear recovery message, and both get a new-room path.
-4. **V7-04 landmark semantics:** converted layout-only asides to ordinary containers, made the persistent demo notice a labelled region, and placed the skip link inside the header landmark. The route sweep now requires zero Axe violations (including moderate), not only zero serious/critical ones.
+The exact candidate image is deployed as revision sf-family-doodle-relay--0000031, but the revision is unhealthy and crash-looping. Its replica was not ready, had restarted 12 times, and logged: “refusing to start in Azure Container Apps without the durable /data volume.”
 
-## Verification
+Fresh Azure inspection found maxReplicas 3, no volume, no /data mount, and two active revisions. The repository deployment validator rejects this topology. The public health endpoint still reports healthy implementation build f84673b2cd40fa5f89324382e754ac1fb3858af8 instead of the candidate SHA.
 
-Fresh local setup and gates:
+Candidate b2242b8 changes only this handoff document relative to f84673b, and the live JS/CSS match the candidate build byte for byte. The product works, but exact build identity and safe single-owner persistent deployment are mandatory for this backend.
 
-```sh
-npm ci                         # 0 vulnerabilities
-npm test                       # pass: Vite build, TypeScript, 7 Rust, 5 deployment, 20 Playwright
-npm run typecheck              # pass
-npm run lint                   # pass: rustfmt + clippy -D warnings
-npm run build                  # pass; dist/ produced
-cargo build --release          # pass
-npm audit --audit-level=high   # pass: 0 vulnerabilities
-```
+Full evidence and all QA results are in [.factory/verification-8.md](verification-8.md).
 
-- Every exact command in the 15-entry `.factory/claims.json` passed independently after `npm ci`, including the new `@claim:host-end-room` command and deployment topology claim.
-- The browser suite covers desktop and 390 px mobile, keyboard activation, 44 px targets, keyboard canvas action, focus, the finished 80-character result, reduced motion, privacy/request recording, offline demo reload/service worker, and end-to-end two-player relays.
-- Axe via `@axe-core/playwright` found **zero violations** for `/`, `/?demo=1`, `/demo`, `/play`, `/privacy`, `/terms`, and a real 404. `/opt/fleet/lib/verify-url.sh` passed locally and live: English language, route title, one H1/main, complete image alt text, labelled controls, and no browser console/page errors.
-- Local response-policy probe returned `Content-Security-Policy` with `frame-ancestors 'none'`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, disabled camera/microphone/geolocation permissions, and `Cache-Control: no-cache` for HTML.
-- Local mobile Lighthouse collected **96 Performance / 100 Accessibility / 100 Best Practices / 100 SEO**, LCP 1.7 s, CLS 0. The bundled Chromium crashed only while collecting Lighthouse’s final full-page screenshot after the audits had completed; Playwright and verify-url had no browser errors.
+## What passed
 
-Live deployment evidence:
+- Mandatory cold first-read on desktop and 390 px mobile, plus the one-click populated sample demo.
+- All 15 exact .factory/claims.json commands after npm ci.
+- npm test: Vite build, TypeScript, 7 Rust tests, 5 deployment tests, and 20 Playwright tests.
+- npm run typecheck, npm run lint, npm run build, cargo build --release, candidate-SHA release build, and npm audit.
+- Live two-player four-turn relay, reload recovery, 80-character mobile boundary, invalid-input recovery, two-person limit, PNG download, host termination, forged-paid protection, concurrency, and persistence reads.
+- Live allowance: exactly 20 requests per second for API and page buckets; excess responses were 429 with Retry-After: 1. Health was exempt.
+- Cold same-origin-only traffic, isolated demo storage and traffic, security headers, caching, service-worker update, and offline demo reload.
+- Zero Axe violations across all real routes on desktop and mobile; 44 px targets, visible focus, keyboard-only demo completion, reduced-motion behavior, and no unexpected application console/page errors.
+- Fresh mobile Lighthouse: 100 / 100 / 100 / 100, LCP 1.4 s, TBT 70 ms, CLS 0, total 100 KiB.
 
-```text
-GET /health
-{"build_sha":"f84673b2cd40fa5f89324382e754ac1fb3858af8","status":"ok"}
-
-deployment contract
-{"revision":"sf-family-doodle-relay--0000030","image":"sociobotregistry.azurecr.io/sf-family-doodle-relay:f84673b2cd40","replicas":1,"dataMount":"/data"}
-
-revision ownership
-{"revision":"sf-family-doodle-relay--0000030","activeRevisions":1,"replicas":1,"trafficWeight":100}
-```
-
-- Azure reports the revision healthy, one active revision, one replica, 100% traffic, `minReplicas=maxReplicas=1`, and the required Azure Files `/data` mount with `uid=10001,gid=10001,file_mode=0770,dir_mode=0770`.
-- Live browser safety flow passed: valid join and reload preserved both-player presence; a host end removed the room (`404`) and showed the guest **“The host ended this room. Make a new room to play again.”** with no console/page errors.
-- Live `verify-url.sh` passed in 568 ms with no console errors and the expected title, language, H1, main landmark, alt text, and labelled controls.
-
-## Run and deploy
+## Reproduce
 
 ```sh
 npm ci
 npm test
+npm run typecheck
 npm run lint
 npm run build
-./scripts/deploy-container.sh
+BUILD_SHA=b2242b83c02279609f631511f9dea036e5dfb1af cargo build --release
+curl -sS https://family-doodle-relay.sociobot.in/health
 ```
 
-The deploy script builds the image in ACR, creates the durable one-owner revision, waits for it to be ready, deactivates superseded owners, and verifies the exact live `/health` build SHA.
+Read-only deployment checks:
 
-## Known gaps
+```sh
+az containerapp show --resource-group sociobot --name sf-family-doodle-relay -o json
+az containerapp revision list --resource-group sociobot --name sf-family-doodle-relay -o json
+az containerapp replica list --resource-group sociobot --name sf-family-doodle-relay --revision sf-family-doodle-relay--0000031 -o json
+```
 
-There are no known product or deployment gaps. The only tooling limitation observed was the Lighthouse Chromium final-screenshot crash described above; it occurred after audits were collected and did not reproduce in Playwright or `verify-url.sh`.
+Validate the live app JSON with scripts/deployment-contract.mjs using expected image sociobotregistry.azurecr.io/sf-family-doodle-relay:b2242b83c022. It currently exits 1 for missing durable storage, max replicas, and readiness. Revision ownership also exits 1 because two revisions are active.
+
+## Required next step
+
+Redeploy the candidate through scripts/deploy-container.sh so the durable relay-data mount, one-replica scale, and one-active-revision rules are applied atomically. Do not accept the release until revision 0000031 or its replacement is healthy and /health reports b2242b83c02279609f631511f9dea036e5dfb1af.
+
+No product code was modified. Docker was unavailable in this worker, so the Dockerfile stages were verified through their exact frontend and Rust build commands and through the already-created candidate image in Azure.
