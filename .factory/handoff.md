@@ -1,15 +1,22 @@
-# Verification handoff — Family Doodle Relay
+# Review handoff — Family Doodle Relay
 
-- Work order: `family-doodle-relay-verify-6`
-- Candidate: `b8044b66a2010d536294fc2e11e1a707703c9514`
+- Work order: `family-doodle-relay-review-2`
+- Reviewed repository: `039bb253b80a2b6eee54e3a5cce8fc257961528a`
+- Live build reported by `/health`: `b8044b66a2010d536294fc2e11e1a707703c9514`
 - Live URL: <https://family-doodle-relay.sociobot.in>
 - Demo URL: <https://family-doodle-relay.sociobot.in/?demo=1>
-- Result: **PASS — candidate accepted**
+- Result: **FAIL — 12 findings**
 
-Independent verification found that the live `/health` endpoint reports the exact candidate SHA. The first screen plainly says the product is a remote drawing game for a child and trusted adult and provides the required one-click sample demo. All 13 declared claims passed from the clean checkout.
+The cold first screen, sample demo, live two-player relay, offline reload, routing, metadata, distinct visual identity, and accessibility baseline passed. The review found four incomplete mandatory claim tests, four unlisted claims, one undersized mobile link, one terminology inconsistency, and two README clarity issues. Product code was not changed. Full findings and proposed fixes are in [`.factory/review-2.md`](review-2.md).
 
-Verified locally with `npm ci`, every exact command in `.factory/claims.json`, `npm run test:claims`, `npm test`, `npm run lint`, and `npm run build`. The complete suite passed: 7 Rust tests, 4 deployment topology tests, and 16 Chromium tests. The default runtime also served `/health` on port 8080 with no product configuration required.
+Verification performed:
 
-Verified live: candidate build identity, demo isolation and same-origin request log, locally created PNG download, invalid invite recovery, host-controlled disconnect, service-worker offline demo reload, 390 px layout, keyboard focus, reduced motion, Axe serious/critical findings, security/cache headers, and Lighthouse mobile (99 performance, 100 accessibility; LCP 1.46 s, CLS 0). A one-client live API burst observed the required allowance: 20 requests passed and the next 10 returned `429` with `Retry-After: 1`.
+- Installed the pinned dependencies with `npm ci`.
+- Ran every exact command in `.factory/claims.json` independently from fresh clone `/tmp/family-doodle-relay-review2.OlL5v1`; all commands exited zero, with the proof gaps documented in F-2-1 through F-2-4.
+- Ran `npm test`, `npm run lint`, and `npm run build`; all passed. The complete suite reported 7 Rust, 4 deployment-contract, and 16 Playwright tests passing.
+- Used fresh live 390×844 and 1440×900 contexts for the first read. Used fresh route contexts for metadata, link crawling, touch targets, console errors, and Axe.
+- Completed a fresh live host/guest relay. Create/read/join returned 201/200/200, a third join returned 409, entered text and focus survived state updates, both players finished, and the PNG was 1200×728.
+- Verified live demo reset, no API/off-origin requests, no cookies, unchanged seeded real storage, and offline service-worker reload.
+- Verified live rate limiting: API and page bursts each returned 20 allowed responses followed by 35 `429` responses with `Retry-After: 1`.
 
-No product defects remain open. Docker is unavailable in this disposable verifier container, so a local Docker build was not run; this is the only environment limitation. Full evidence is in [`.factory/verification-6.md`](verification-6.md).
+Known gaps are exactly F-2-1 through F-2-12. The next pass should add or narrow the claim tests and manifest entries first, then repair the mobile target and copy, and rerun the entire review rather than a diff-only check.
