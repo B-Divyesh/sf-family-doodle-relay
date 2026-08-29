@@ -111,6 +111,83 @@ test('regression V9-01: rejects candidate 4fdc1926 before an unmounted three-rep
     { name: 'sf-family-doodle-relay--0000033', properties: { active: true, replicas: 1, trafficWeight: 100 } },
   ], 'sf-family-doodle-relay--0000033'), [
     'exactly one revision must be active, found 2',
+    'active owner must be healthy',
+    'active owner must be running',
+  ]);
+});
+
+test('regression V10-01: rejects the exact activation-failed revision that owned live traffic', () => {
+  // Independent verification 10 observed this live topology for candidate
+  // 8ab15b78893f: its generic deployment emitted revision 0000036 without
+  // the durable template, while mounted revision 0000035 still served as the
+  // only ready fallback. Keep this exact shape here so neither validator can
+  // accidentally accept the split owner state again.
+  const verifierV10App = appWith({
+    containers: [{
+      name: 'app',
+      image: 'sociobotregistry.azurecr.io/sf-family-doodle-relay:8ab15b78893f',
+      env: [{ name: 'PORT', value: '8080' }],
+    }],
+    scale: { minReplicas: 1, maxReplicas: 3 },
+    volumes: null,
+  }, 'sf-family-doodle-relay--0000036');
+  verifierV10App.properties.latestReadyRevisionName = 'sf-family-doodle-relay--0000035';
+
+  assert.deepEqual(
+    deploymentContractErrors(
+      verifierV10App,
+      'sociobotregistry.azurecr.io/sf-family-doodle-relay:8ab15b78893f',
+    ),
+    [
+      'maximum replicas must be 1',
+      'relay-data must be mounted at /data',
+      'relay-data must use the family-doodle-relay-data Azure Files storage',
+      'relay-data mount options must include uid=10001',
+      'relay-data mount options must include gid=10001',
+      'relay-data mount options must include file_mode=0770',
+      'relay-data mount options must include dir_mode=0770',
+      'latest revision is not ready',
+    ],
+  );
+  assert.deepEqual(revisionOwnershipErrors([
+    {
+      name: 'sf-family-doodle-relay--0000035',
+      properties: {
+        active: true,
+        healthState: 'Healthy',
+        runningState: 'RunningAtMaxScale',
+        replicas: 1,
+        trafficWeight: 0,
+      },
+    },
+    {
+      name: 'sf-family-doodle-relay--0000036',
+      properties: {
+        active: true,
+        healthState: 'Unhealthy',
+        runningState: 'ActivationFailed',
+        replicas: 1,
+        trafficWeight: 100,
+      },
+    },
+  ], 'sf-family-doodle-relay--0000035'), [
+    'exactly one revision must be active, found 2',
+    'active owner must receive 100 percent of traffic',
+  ]);
+  assert.deepEqual(revisionOwnershipErrors([
+    {
+      name: 'sf-family-doodle-relay--0000036',
+      properties: {
+        active: true,
+        healthState: 'Unhealthy',
+        runningState: 'ActivationFailed',
+        replicas: 1,
+        trafficWeight: 100,
+      },
+    },
+  ], 'sf-family-doodle-relay--0000036'), [
+    'active owner must be healthy',
+    'active owner must be running',
   ]);
 });
 
@@ -137,8 +214,26 @@ test('@claim:deployment-topology accepts only one ready app instance using the d
     dataMount: '/data',
   });
   assert.deepEqual(assertRevisionOwnership([
-    { name: 'relay--old', properties: { active: false, replicas: 0, trafficWeight: 0 } },
-    { name: 'sf-family-doodle-relay--repair', properties: { active: true, replicas: 1, trafficWeight: 100 } },
+    {
+      name: 'relay--old',
+      properties: {
+        active: false,
+        healthState: 'Healthy',
+        runningState: 'Running',
+        replicas: 0,
+        trafficWeight: 0,
+      },
+    },
+    {
+      name: 'sf-family-doodle-relay--repair',
+      properties: {
+        active: true,
+        healthState: 'Healthy',
+        runningState: 'RunningAtMaxScale',
+        replicas: 1,
+        trafficWeight: 100,
+      },
+    },
   ], 'sf-family-doodle-relay--repair'), {
     revision: 'sf-family-doodle-relay--repair',
     activeRevisions: 1,
@@ -185,8 +280,26 @@ test('rejects an unready revision or a stale image', () => {
 
 test('rejects an old active owner even when it has zero traffic', () => {
   const revisions = [
-    { name: 'relay--old', properties: { active: true, replicas: 1, trafficWeight: 0 } },
-    { name: 'relay--repair', properties: { active: true, replicas: 1, trafficWeight: 100 } },
+    {
+      name: 'relay--old',
+      properties: {
+        active: true,
+        healthState: 'Healthy',
+        runningState: 'Running',
+        replicas: 1,
+        trafficWeight: 0,
+      },
+    },
+    {
+      name: 'relay--repair',
+      properties: {
+        active: true,
+        healthState: 'Healthy',
+        runningState: 'RunningAtMaxScale',
+        replicas: 1,
+        trafficWeight: 100,
+      },
+    },
   ];
   assert.deepEqual(revisionOwnershipErrors(revisions, 'relay--repair'), [
     'exactly one revision must be active, found 2',

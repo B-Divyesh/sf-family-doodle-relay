@@ -95,6 +95,12 @@ export function revisionOwnershipErrors(revisions, expectedRevision) {
   if (!owner) {
     errors.push(`ready revision ${expectedRevision} must be the active owner`);
   } else {
+    if (owner.properties.healthState !== 'Healthy') {
+      errors.push('active owner must be healthy');
+    }
+    if (!['Running', 'RunningAtMaxScale'].includes(owner.properties.runningState)) {
+      errors.push('active owner must be running');
+    }
     if (owner.properties.replicas !== 1) {
       errors.push('active owner must have exactly one replica');
     }
