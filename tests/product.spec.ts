@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import { PNG } from 'pngjs';
 
 test('landing and legal routes meet the page baseline', async ({ page }) => {
   for (const route of ['/', '/demo', '/play', '/privacy', '/terms', '/not-a-page']) {
@@ -20,11 +21,33 @@ test('phone layout has no horizontal overflow and keyboard actions work', async 
   await page.getByRole('button', { name: 'Add a sample mark' }).focus();
   await page.keyboard.press('Enter');
   await expect(page.getByRole('button', { name: 'Undo last line' })).toBeEnabled();
+  const demoLink = await page.getByRole('navigation').getByRole('link', { name: 'Demo' }).boundingBox();
+  expect(demoLink?.width).toBeGreaterThanOrEqual(44);
+  expect(demoLink?.height).toBeGreaterThanOrEqual(44);
   for (const name of ['Privacy', 'Terms', 'Built by Param Factory external link']) {
     const box = await page.getByRole('contentinfo').getByRole('link', { name }).boundingBox();
     expect(box?.width).toBeGreaterThanOrEqual(44);
     expect(box?.height).toBeGreaterThanOrEqual(44);
   }
+  await page.goto('/not-a-page');
+  for (const link of await page.getByRole('link').all()) {
+    const box = await link.boundingBox();
+    expect(box?.width).toBeGreaterThanOrEqual(44);
+    expect(box?.height).toBeGreaterThanOrEqual(44);
+  }
+});
+
+test('offline demo reload includes the precached built shell', async ({ page, context }) => {
+  await page.goto('/demo');
+  await page.evaluate(() => navigator.serviceWorker.ready);
+  await page.reload();
+  await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
+  const cdp = await context.newCDPSession(page);
+  await cdp.send('Network.clearBrowserCache');
+  await context.setOffline(true);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(page.getByRole('heading', { name: 'Add one surprising detail' })).toBeVisible();
+  await context.setOffline(false);
 });
 
 test('@claim:demo-sandbox @claim:privacy-defaults sample demo stays isolated and same-origin', async ({ page, context }) => {
@@ -46,13 +69,30 @@ test('@claim:demo-sandbox @claim:privacy-defaults sample demo stays isolated and
   expect(await context.cookies()).toEqual([]);
 });
 
-test('@claim:png-export finished relay downloads a PNG with every shown relay entry', async ({ page }) => {
+test('@claim:png-export finished relay downloads a PNG with every shown relay entry', async ({ page }, testInfo) => {
   await page.goto('/demo');
   await page.getByRole('button', { name: 'Finish this turn' }).click();
   const downloadEvent = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Download the PNG strip' }).click();
   const download = await downloadEvent;
   expect(download.suggestedFilename()).toBe('family-doodle-relay.png');
+  const downloadPath = testInfo.outputPath('family-doodle-relay.png');
+  await download.saveAs(downloadPath);
+  const png = PNG.sync.read(await (await import('node:fs/promises')).readFile(downloadPath));
+  expect([png.width, png.height]).toEqual([1200, 728]);
+  const darkPixels = (left: number, top: number, right: number, bottom: number) => {
+    let count = 0;
+    for (let y = top; y < bottom; y += 1) for (let x = left; x < right; x += 1) {
+      const offset = (y * png.width + x) * 4;
+      if (png.data[offset] < 80 && png.data[offset + 1] < 80 && png.data[offset + 2] < 80) count += 1;
+    }
+    return count;
+  };
+  // Both panels and both distinct quote rows must contain ink in the downloaded PNG.
+  expect(darkPixels(80, 175, 540, 495)).toBeGreaterThan(100);
+  expect(darkPixels(630, 175, 1090, 495)).toBeGreaterThan(100);
+  expect(darkPixels(60, 535, 1140, 565)).toBeGreaterThan(40);
+  expect(darkPixels(60, 575, 1140, 605)).toBeGreaterThan(40);
   await expect(page.getByText('Turn 1 guess: “A house at sea”')).toBeVisible();
   await expect(page.getByText('Turn 2 guess: “A whale carrying a tiny village”')).toBeVisible();
   expect(await page.locator('.result-canvas').count()).toBe(2);
@@ -85,10 +125,13 @@ test('@claim:one-time-price page states the one-time price and uses Sociobot che
   await expect(page.getByText('One-time purchase. Sociobot is the merchant of record.')).toBeVisible();
 });
 
-test('@claim:family-edition an unverified paid flag cannot forge eight turns', async ({ request }) => {
+test('@claim:family-edition only a recorded valid license enables eight turns', async ({ request }) => {
   const created = await (await request.post('/api/rooms', { data: { paid: true } })).json();
   const room = await (await request.get(`/api/rooms/${created.code}?token=${created.token}`)).json();
   expect(room.total_turns).toBe(4);
+  const verified = await (await request.post('/api/rooms', { data: { license: 'fixture-valid-family-edition-license' } })).json();
+  const familyRoom = await (await request.get(`/api/rooms/${verified.code}?token=${verified.token}`)).json();
+  expect(familyRoom.total_turns).toBe(8);
 });
 
 test('@claim:live-relay two players complete four synced turns', async ({ browser, request }) => {
@@ -109,12 +152,18 @@ test('@claim:live-relay two players complete four synced turns', async ({ browse
   await host.getByRole('button', { name: 'Finish this turn' }).click();
   await expect(guest.getByRole('heading', { name: 'Write your guess' })).toBeVisible();
   await guest.getByLabel('Your guess').fill('A little mountain home');
+  await guest.waitForTimeout(750);
+  await expect(guest.getByLabel('Your guess')).toHaveValue('A little mountain home');
+  await expect(guest.getByLabel('Your guess')).toBeFocused();
   await guest.getByRole('button', { name: 'Send your guess' }).click();
   await expect(guest.getByRole('heading', { name: 'Add one surprising detail' })).toBeVisible();
   await guest.getByRole('button', { name: 'Add a sample mark' }).click();
   await guest.getByRole('button', { name: 'Finish this turn' }).click();
   await expect(host.getByRole('heading', { name: 'Write your guess' })).toBeVisible();
   await host.getByLabel('Your guess').fill('A home riding a wave');
+  await host.waitForTimeout(750);
+  await expect(host.getByLabel('Your guess')).toHaveValue('A home riding a wave');
+  await expect(host.getByLabel('Your guess')).toBeFocused();
   await host.getByRole('button', { name: 'Send your guess' }).click();
   await expect(host.getByRole('heading', { name: 'Your relay is finished' })).toBeVisible();
   await expect(guest.getByText('A home riding a wave')).toBeVisible();
@@ -122,11 +171,15 @@ test('@claim:live-relay two players complete four synced turns', async ({ browse
   await guestContext.close();
 });
 
-test('@claim:rate-limit rate limiter returns 429 with Retry-After even when forwarded addresses are spoofed', async ({ playwright }) => {
+test('@claim:rate-limit rate limiter returns 429 with Retry-After per trusted ingress client for API and pages', async ({ playwright }) => {
   const client = await playwright.request.newContext({ baseURL: 'http://127.0.0.1:8080' });
-  const responses = await Promise.all(Array.from({ length: 55 }, (_, index) => client.get('/api/rooms/NOT-A-ROOM?token=none', { headers: { 'X-Forwarded-For': `203.0.113.${index}` } })));
+  const responses = await Promise.all(Array.from({ length: 55 }, (_, index) => client.get('/api/rooms/NOT-A-ROOM?token=none', { headers: { 'X-Forwarded-For': `203.0.113.${index}, 198.51.100.44` } })));
   const limited = responses.filter(response => response.status() === 429);
   expect(limited.length).toBeGreaterThan(0);
   expect(limited[0].headers()['retry-after']).toBe('1');
+  const pages = await Promise.all(Array.from({ length: 55 }, (_, index) => client.get('/privacy', { headers: { 'X-Forwarded-For': `203.0.113.${index}, 198.51.100.45` } })));
+  const limitedPages = pages.filter(response => response.status() === 429);
+  expect(limitedPages.length).toBeGreaterThan(0);
+  expect(limitedPages[0].headers()['retry-after']).toBe('1');
   await client.dispose();
 });

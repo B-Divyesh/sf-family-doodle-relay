@@ -29,7 +29,7 @@ function header() {
 
 function footer() {
   return `<footer class="site-footer"><div><strong>Family Doodle Relay</strong><br><span class="muted">Draw and guess with one trusted person.</span></div>
-  <div class="footer-links"><a href="/privacy" data-link>Privacy</a><a href="/terms" data-link>Terms</a><a href="https://hello-factory.sociobot.in">Built by Param Factory <span aria-label="external link">↗</span></a><span>v1.0.0</span><span>Art generated for this product</span></div></footer>`;
+  <div class="footer-links"><a href="/privacy" data-link>Privacy</a><a href="/terms" data-link>Terms</a><a href="https://hello-factory.sociobot.in">Built by Param Factory <span aria-label="external link">↗</span></a><span>v1.0.1</span><span>Art generated for this product</span></div></footer>`;
 }
 
 function setMeta(title: string, description: string, canonicalPath: string) {
@@ -149,8 +149,20 @@ function renderRoom(initial: RoomState, isDemo: boolean, token?: string) {
     const heading = document.querySelector('h1'); if (heading) heading.textContent = state.finished?'Your relay is finished':turnHeading(state);
     const status = document.querySelector('#room-status'); if (status) { status.className=`room-status ${state.partner_connected?'live-dot':''}`; status.textContent=statusText(state,isDemo); }
     const body = document.querySelector<HTMLDivElement>('#room-body')!;
-    if (state.finished) { body.innerHTML = resultHtml(state); bindResultCanvases(state); document.querySelector('#download-strip')?.addEventListener('click',()=>downloadStrip(state)); document.querySelector('#new-room')?.addEventListener('click',createRoom); return; }
     const active = state.role === state.active_role && (isDemo || state.partner_connected);
+    const renderKey = `${state.phase}:${state.total_turns}:${state.finished}:${active}`;
+    if (body.dataset.renderKey === renderKey) {
+      // State arrives frequently to keep the other player in sync. Do not replace
+      // controls during an unchanged turn: a replacement discards typed guesses,
+      // pointer capture, focus, and validation feedback.
+      if (state.action === 'draw' && !currentStroke) {
+        const canvas = document.querySelector<HTMLCanvasElement>('#draw-canvas');
+        if (canvas) drawStrokes(canvas, state.strokes);
+      }
+      return;
+    }
+    body.dataset.renderKey = renderKey;
+    if (state.finished) { body.innerHTML = resultHtml(state); bindResultCanvases(state); document.querySelector('#download-strip')?.addEventListener('click',()=>downloadStrip(state)); document.querySelector('#new-room')?.addEventListener('click',createRoom); return; }
     body.innerHTML = `<div class="turn-grid"><aside class="turn-rail"><span class="kicker">Turn ${Math.min(state.phase+1,state.total_turns)} of ${state.total_turns}</span><div class="timer" id="timer">00:45</div><h2>${state.action==='draw'?(state.phase===2?'Add one detail':'Draw the prompt'):'Name the drawing'}</h2><p>${state.action==='draw'?escapeHtml(state.prompt):'Write one short guess. Your partner sees it after you send it.'}</p>${state.guesses.length?`<p><strong>Last guess:</strong><br>${escapeHtml(state.guesses.at(-1)!)}</p>`:''}</aside>
       <section aria-label="Current turn">${state.action==='draw'?canvasHtml(active):guessHtml(active)}</section></div>
       ${state.role==='host'&&!isDemo?inviteHtml(state.code):''}`;
@@ -169,7 +181,7 @@ function renderRoom(initial: RoomState, isDemo: boolean, token?: string) {
   if (isDemo) { document.querySelector('#reset-demo')?.addEventListener('click',()=>{ demoVersion++; demo(); }); update(); cleanup=()=>window.clearInterval(timerId); }
   else {
     const scheme=location.protocol==='https:'?'wss':'ws'; socket=new WebSocket(`${scheme}://${location.host}/ws/${state.code}?token=${encodeURIComponent(token!)}`);
-    socket.addEventListener('message',event=>{ const next=JSON.parse(event.data); if(next.kind==='ended'){roomError('The host ended this room. Make a new room to play again.');return;} if(next.kind==='state'&&next.role===state.role){state=next;update();} });
+    socket.addEventListener('message',event=>{ const next=JSON.parse(event.data); if(next.kind==='ended'){roomError('The host ended this room. Make a new room to play again.');return;} if(next.kind==='state'&&next.role===state.role){Object.assign(state,next);update();} });
     socket.addEventListener('close',()=>{ const status=document.querySelector('#room-status'); if(status&&!state.finished)status.textContent='The connection paused. Reload the page to reconnect.'; });
     socket.addEventListener('error',()=>{ const status=document.querySelector('#room-status'); if(status)status.textContent='The room lost its connection. Reload the page to reconnect.'; });
     update(); cleanup=()=>{socket?.close();window.clearInterval(timerId);};

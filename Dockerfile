@@ -4,7 +4,7 @@ COPY package.json package-lock.json vite.config.ts ./
 COPY frontend ./frontend
 RUN npm ci && npm run build
 
-FROM rust:1.88-slim-bookworm AS backend
+FROM rust:1-slim-bookworm AS backend
 ARG BUILD_SHA=dev
 ENV BUILD_SHA=${BUILD_SHA}
 WORKDIR /build

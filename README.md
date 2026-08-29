@@ -39,17 +39,17 @@ docker build --build-arg BUILD_SHA=local -t family-doodle-relay .
 docker run --rm -p 8080:8080 -e PORT=8080 family-doodle-relay
 ```
 
-The container needs no other environment variables. `GET /health` returns the build SHA. Rooms live in `/data/family-doodle-relay.db`, are shared by serving processes that mount `/data`, and are deleted at their four-hour expiry.
+The container needs no other environment variables. `GET /health` returns the build SHA. Rooms live in `/data/family-doodle-relay.db`, are deleted at their four-hour expiry, and the container deployment is deliberately pinned to one replica so a relay stays on its private temporary store.
 
 ## Architecture and privacy
 
-The browser app uses Vite and TypeScript. Rust, Axum, and a short-lived SQLite room store serve the app. Each WebSocket refreshes from the shared room store, so reconnects and serving processes see the same relay. Every non-health route is rate limited by its trusted socket peer; caller-supplied forwarded headers are ignored.
+The browser app uses Vite and TypeScript. Rust, Axum, and a short-lived SQLite room store serve the app. Live state updates keep the active turn in place, so a typed guess, focus, validation message, and a pointer stroke survive sync messages. Every non-health route is rate limited per client by the right-most address added by the factory ingress.
 
 Browser storage holds private room keys and an optional purchase license. The server does not ask for names, ages, email addresses, or profiles. See `/privacy` and `/terms`.
 
 ## Deploy
 
-The factory builds the root `Dockerfile` and supplies `PORT` plus `BUILD_SHA`. `FACTORY_SOCIOBOT_KEY` may be supplied to authenticate server-side license verification; it is optional and never embedded in the image. DNS, billing product registration, and infrastructure stay outside this repository.
+The factory builds the root `Dockerfile` and supplies `PORT` plus `BUILD_SHA`. The Azure Container App deployment is configured with `minReplicas: 1` and `maxReplicas: 1`, which is required for the container-local temporary room store. `FACTORY_SOCIOBOT_KEY` may be supplied to authenticate server-side license verification; it is optional and never embedded in the image. DNS, billing product registration, and infrastructure stay outside this repository.
 
 ## License
 

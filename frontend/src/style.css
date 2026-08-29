@@ -32,7 +32,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .site-header { min-height: 72px; border-bottom: 3px double var(--ink); display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 12px max(20px, calc((100vw - 1180px) / 2)); }
 .wordmark { font-family: Georgia, 'Times New Roman', serif; font-size: 20px; font-weight: 700; text-decoration: none; min-height: 44px; display: inline-flex; align-items: center; }
 .site-nav { display: flex; align-items: center; gap: 20px; font-size: 15px; }
-.site-nav a { min-height: 44px; display: inline-flex; align-items: center; }
+.site-nav a { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; }
 main { min-height: 70vh; }
 .wrap { width: min(1180px, calc(100% - 40px)); margin-inline: auto; }
 .narrow { width: min(720px, calc(100% - 40px)); margin-inline: auto; }
@@ -114,6 +114,7 @@ input[aria-invalid='true'] { border-color: var(--danger); }
 .legal { padding: 72px 0 112px; }
 .legal h1 { margin-bottom: 40px; }
 .legal h2 { font-size: 32px; margin-top: 48px; }
+.legal a:not(.button) { display: inline-flex; align-items: center; min-height: 44px; }
 .notice { padding: 16px; border: 1px solid var(--ink); background: var(--sheet); }
 .route-enter { animation: enter .22s ease-out both; }
 .sr-only { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }

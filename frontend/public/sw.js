@@ -1,8 +1,20 @@
-const CACHE = 'relay-shell-v1';
-const CORE = ['/', '/demo', '/relay-hero-mobile.avif', '/favicon.svg'];
+const CACHE = 'relay-shell-v2';
+const DOCUMENTS = ['/', '/demo'];
+const STATIC = ['/relay-hero-mobile.avif', '/favicon.svg'];
+
+async function precacheShell() {
+  const cache = await caches.open(CACHE);
+  await cache.addAll([...DOCUMENTS, ...STATIC]);
+  const index = await cache.match('/');
+  if (!index) return;
+  const html = await index.text();
+  const urls = [...html.matchAll(/(?:src|href)="([^"?#]+(?:\.js|\.css))"/g)]
+    .map(([, value]) => new URL(value, self.location.origin).pathname);
+  await cache.addAll([...new Set(urls)]);
+}
 
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(CORE)));
+  event.waitUntil(precacheShell());
   self.skipWaiting();
 });
 
@@ -15,8 +27,13 @@ self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
   if (event.request.method !== 'GET' || url.origin !== location.origin || url.pathname.startsWith('/api/') || url.pathname.startsWith('/ws/')) return;
   event.respondWith(fetch(event.request).then(response => {
-    const copy = response.clone();
-    caches.open(CACHE).then(cache => cache.put(event.request, copy));
+    if (response.ok) {
+      const copy = response.clone();
+      void caches.open(CACHE).then(cache => cache.put(event.request, copy));
+    }
     return response;
-  }).catch(() => caches.match(event.request).then(hit => hit || (event.request.mode === 'navigate' ? caches.match('/') : Response.error()))));
+  }).catch(async () => {
+    const cache = await caches.open(CACHE);
+    return (await cache.match(event.request)) || (event.request.mode === 'navigate' ? (await cache.match('/demo')) || (await cache.match('/')) : Response.error());
+  }));
 });
