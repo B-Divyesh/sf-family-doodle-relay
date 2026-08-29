@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# Deploy the relay with its durable, single-owner room store. The standard
-# factory builder remains responsible for the image, hostname, and certificate.
+# Deploy the relay with its durable, single-owner room store. Build the image
+# here, then patch the complete revision template in one operation: the generic
+# factory container deployer starts a new image without this product's /data
+# mount, which makes this backend correctly refuse to boot.
 set -euo pipefail
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -9,6 +11,7 @@ subscription="${AZURE_SUBSCRIPTION_ID:-283af945-693b-4a6e-b952-df928d0a18a9}"
 resource_group="sociobot"
 environment="factory-env"
 app_name="sf-family-doodle-relay"
+registry="sociobotregistry"
 storage_account="sociobotblob"
 share_name="sf-family-doodle-relay-data"
 storage_name="family-doodle-relay-data"
@@ -21,10 +24,13 @@ fi
 storage_key="$(az storage account keys list --resource-group "$resource_group" --account-name "$storage_account" --query '[0].value' -o tsv)"
 az containerapp env storage set --resource-group "$resource_group" --name "$environment" --storage-name "$storage_name" --access-mode ReadWrite --azure-file-account-name "$storage_account" --azure-file-share-name "$share_name" --azure-file-account-key "$storage_key" --only-show-errors -o none
 
-/opt/fleet/lib/deploy-container.sh family-doodle-relay "$repo_dir"
-
-image="$(az containerapp show --resource-group "$resource_group" --name "$app_name" --query 'properties.template.containers[0].image' -o tsv)"
-deployment_patch="$(printf '%s' "{\"properties\":{\"configuration\":{\"activeRevisionsMode\":\"Single\"},\"template\":{\"containers\":[{\"name\":\"app\",\"image\":\"${image}\",\"resources\":{\"cpu\":0.5,\"memory\":\"1Gi\"},\"env\":[{\"name\":\"PORT\",\"value\":\"8080\"}],\"volumeMounts\":[{\"volumeName\":\"relay-data\",\"mountPath\":\"/data\"}]}],\"scale\":{\"minReplicas\":1,\"maxReplicas\":1},\"volumes\":[{\"name\":\"relay-data\",\"storageType\":\"AzureFile\",\"storageName\":\"${storage_name}\",\"mountOptions\":\"uid=10001,gid=10001,file_mode=0770,dir_mode=0770\"}]}}}")"
+echo "== build $source_sha with the durable runtime configuration"
+image_tag="${app_name}:${source_sha:0:12}"
+az acr build --registry "$registry" --image "$image_tag" --file Dockerfile \
+  --build-arg "BUILD_SHA=$source_sha" --build-arg "GIT_SHA=$source_sha" --build-arg "SOURCE_COMMIT=$source_sha" \
+  "$repo_dir"
+image="${registry}.azurecr.io/${image_tag}"
+deployment_patch="$(node "$repo_dir/scripts/deployment-contract.mjs" --template --image "$image")"
 az rest --method patch --url "$app_url" --body "$deployment_patch" --only-show-errors -o none
 
 echo "== wait for the durable single-owner revision"

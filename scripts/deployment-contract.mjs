@@ -2,6 +2,31 @@
 
 import process from 'node:process';
 
+export function durableDeploymentPatch(image) {
+  if (!image) throw new Error('an image is required for the durable deployment patch');
+  return {
+    properties: {
+      configuration: { activeRevisionsMode: 'Single' },
+      template: {
+        containers: [{
+          name: 'app',
+          image,
+          resources: { cpu: 0.5, memory: '1Gi' },
+          env: [{ name: 'PORT', value: '8080' }],
+          volumeMounts: [{ volumeName: 'relay-data', mountPath: '/data' }],
+        }],
+        scale: { minReplicas: 1, maxReplicas: 1 },
+        volumes: [{
+          name: 'relay-data',
+          storageType: 'AzureFile',
+          storageName: 'family-doodle-relay-data',
+          mountOptions: 'uid=10001,gid=10001,file_mode=0770,dir_mode=0770',
+        }],
+      },
+    },
+  };
+}
+
 export function deploymentContractErrors(app, expectedImage = '') {
   const errors = [];
   const properties = app?.properties ?? {};
@@ -89,6 +114,12 @@ export function assertRevisionOwnership(revisions, expectedRevision) {
 }
 
 async function main() {
+  if (process.argv.includes('--template')) {
+    const imageIndex = process.argv.indexOf('--image');
+    const image = imageIndex >= 0 ? process.argv[imageIndex + 1] : '';
+    process.stdout.write(`${JSON.stringify(durableDeploymentPatch(image))}\n`);
+    return;
+  }
   const expectedImageIndex = process.argv.indexOf('--expected-image');
   const expectedImage = expectedImageIndex >= 0 ? process.argv[expectedImageIndex + 1] : '';
   const expectedRevisionIndex = process.argv.indexOf('--expected-revision');

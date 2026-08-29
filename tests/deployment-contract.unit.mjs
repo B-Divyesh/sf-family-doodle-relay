@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   assertDeploymentContract,
   assertRevisionOwnership,
+  durableDeploymentPatch,
   deploymentContractErrors,
   revisionOwnershipErrors,
 } from '../scripts/deployment-contract.mjs';
@@ -73,6 +74,19 @@ test('@claim:deployment-topology accepts only one ready app instance using the d
     activeRevisions: 1,
     replicas: 1,
     trafficWeight: 100,
+  });
+});
+
+test('deployment patch starts a new image with durable single-owner storage already attached', () => {
+  const patch = durableDeploymentPatch(image);
+  const deployment = appWith(patch.properties.template);
+  deployment.properties.configuration = patch.properties.configuration;
+
+  assert.deepEqual(assertDeploymentContract(deployment, image), {
+    revision: 'sf-family-doodle-relay--repair',
+    image,
+    replicas: 1,
+    dataMount: '/data',
   });
 });
 

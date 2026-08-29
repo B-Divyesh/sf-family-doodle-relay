@@ -111,7 +111,7 @@ input[aria-invalid='true'] { border-color: var(--danger); }
 .result-strip { background: var(--sheet); border: 2px solid var(--ink); padding: 24px; }
 .result-panels { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin: 24px 0; }
 .result-panels canvas { width: 100%; background: var(--paper); border: 1px solid var(--ink); }
-.result-quote { font: italic 24px Georgia, serif; }
+.result-quote { font: italic 24px Georgia, serif; overflow-wrap: anywhere; }
 .legal { padding: 72px 0 112px; }
 .legal h1 { margin-bottom: 40px; }
 .legal h2 { font-size: 32px; margin-top: 48px; }

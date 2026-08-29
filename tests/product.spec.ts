@@ -27,7 +27,7 @@ test('real routes expose complete metadata and meet the page baseline', async ({
     await expect(page.locator('meta[name="twitter:description"]')).toHaveAttribute('content', /\S/);
     await expect(page.locator('link[rel="apple-touch-icon"]')).toHaveAttribute('href', '/apple-touch-icon.png');
     const results = await new AxeBuilder({ page }).analyze();
-    expect(results.violations.filter(v => ['serious', 'critical'].includes(v.impact || ''))).toEqual([]);
+    expect(results.violations).toEqual([]);
   }
 });
 
@@ -88,6 +88,44 @@ test('phone layout has no horizontal overflow, 44 px controls, and keyboard acti
       expect(box?.height, `${route} control ${index} is too short`).toBeGreaterThanOrEqual(44);
     }
   }
+});
+
+test('an unbroken supported 80-character guess wraps on the completed 390 px relay', async ({ browser, request }) => {
+  const created = await (await request.post('/api/rooms', { data: {} })).json();
+  const joined = await (await request.post('/api/rooms/join', { data: { code: created.code } })).json();
+  const hostContext = await browser.newContext({ extraHTTPHeaders: { 'X-Forwarded-For': '198.51.100.71' } });
+  const guestContext = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    extraHTTPHeaders: { 'X-Forwarded-For': '198.51.100.72' },
+  });
+  const host = await hostContext.newPage();
+  const guest = await guestContext.newPage();
+  const boundaryGuess = 'x'.repeat(80);
+
+  await host.goto('/');
+  await host.evaluate(({ code, value }) => localStorage.setItem(`relay:room:${code}`, JSON.stringify(value)), { code: created.code, value: created });
+  await guest.goto('/');
+  await guest.evaluate(({ code, value }) => localStorage.setItem(`relay:room:${code}`, JSON.stringify(value)), { code: created.code, value: joined });
+  await Promise.all([host.goto(`/room/${created.code}`), guest.goto(`/room/${created.code}`)]);
+  await expect(host.getByText('Both players are here')).toBeVisible();
+
+  await host.getByRole('button', { name: 'Add a sample mark' }).click();
+  await host.getByRole('button', { name: 'Finish this turn' }).click();
+  await expect(guest.getByRole('heading', { name: 'Write your guess' })).toBeVisible();
+  await guest.getByLabel('Your guess').fill('A tiny house on a wave');
+  await guest.getByRole('button', { name: 'Send your guess' }).click();
+  await expect(guest.getByRole('heading', { name: 'Add one surprising detail' })).toBeVisible();
+  await guest.getByRole('button', { name: 'Add a sample mark' }).click();
+  await guest.getByRole('button', { name: 'Finish this turn' }).click();
+  await expect(host.getByRole('heading', { name: 'Write your guess' })).toBeVisible();
+  await host.getByLabel('Your guess').fill(boundaryGuess);
+  await host.getByRole('button', { name: 'Send your guess' }).click();
+
+  await expect(guest.getByRole('heading', { name: 'Your relay is finished' })).toBeVisible();
+  await expect(guest.getByText(boundaryGuess, { exact: false })).toBeVisible();
+  expect(await guest.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await hostContext.close();
+  await guestContext.close();
 });
 
 test('offline demo reload includes the precached built shell', async ({ page, context }) => {
@@ -324,6 +362,32 @@ test('@claim:free-core four no-license turns and a PNG strip never open checkout
   await host.getByRole('button', { name: 'Download the PNG strip' }).click();
   expect((await downloadEvent).suggestedFilename()).toBe('family-doodle-relay.png');
   expect(checkoutRequests).toEqual([]);
+  await hostContext.close();
+  await guestContext.close();
+});
+
+test('@claim:host-end-room the host can end a private room for both players at any time', async ({ browser, request }) => {
+  const created = await (await request.post('/api/rooms', { data: {} })).json();
+  const joined = await (await request.post('/api/rooms/join', { data: { code: created.code } })).json();
+  const hostContext = await browser.newContext({ extraHTTPHeaders: { 'X-Forwarded-For': '198.51.100.81' } });
+  const guestContext = await browser.newContext({ extraHTTPHeaders: { 'X-Forwarded-For': '198.51.100.82' } });
+  const host = await hostContext.newPage();
+  const guest = await guestContext.newPage();
+
+  await host.goto('/');
+  await host.evaluate(({ code, value }) => localStorage.setItem(`relay:room:${code}`, JSON.stringify(value)), { code: created.code, value: created });
+  await guest.goto('/');
+  await guest.evaluate(({ code, value }) => localStorage.setItem(`relay:room:${code}`, JSON.stringify(value)), { code: created.code, value: joined });
+  await Promise.all([host.goto(`/room/${created.code}`), guest.goto(`/room/${created.code}`)]);
+  await expect(host.getByText('Both players are here')).toBeVisible();
+
+  host.once('dialog', dialog => dialog.accept());
+  await host.getByRole('button', { name: 'End this room' }).click();
+  for (const page of [host, guest]) {
+    await expect(page.getByRole('heading', { name: 'The room did not open' })).toBeVisible();
+    await expect(page.getByRole('alert')).toHaveText('The host ended this room. Make a new room to play again.');
+    await expect(page.getByRole('link', { name: 'Make a new room' })).toBeVisible();
+  }
   await hostContext.close();
   await guestContext.close();
 });
