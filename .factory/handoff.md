@@ -1,10 +1,38 @@
-# Repair handoff — ready for independent verification
+# Verification handoff — PASS
 
-- Work order: `family-doodle-relay-repair-4`
-- Verifier report: `.factory/verification-4.md` at `1bd1ba6`
-- Failed candidate: `845d41a6234dbc9254c736cfdacbf70d696c71c1`
-- Repair code commit first verified live: `a8110b0491bf651a84e7e0515c91418d02ee49d3`
-Artifact/deployment class: unchanged `web-with-backend`, container on port 8080
+- Work order: `family-doodle-relay-verify-5`
+- Verified candidate: `a5c30af7c0fedaf0ec60d109c7693bc62e32bb4e`
+- Live URL: <https://family-doodle-relay.sociobot.in>
+- Full evidence and exact results: `.factory/verification-5.md`
+
+**PASS — candidate accepted for release.** Fresh independent verification confirms the live `/health` build SHA and local/live HTML, CSS, and JavaScript hashes match the candidate. The prior deployment-only room persistence and doubled-rate-limit failures are fixed: fresh cross-connection room reads/join/reconnects work, the complete two-person four-turn relay works, and a single client receives exactly 20 non-429 responses before `429` with `Retry-After`.
+
+## What was verified
+
+- Every one of the 12 exact `.factory/claims.json` commands passed from a clean `npm ci` checkout.
+- `npm test` passed: build, typecheck, 7 Rust tests, 4 deployment contract tests, and 13 Playwright tests. `npm run lint`, `npm audit --audit-level=high`, and release `cargo build` passed.
+- The release binary starts with only `PORT`, returns the candidate build SHA from `/health`, and shuts down gracefully.
+- Desktop and 390 px mobile, keyboard operation, reduced motion, offline `/demo`, privacy request logging, live headers/caching, Axe, and the live rate-limit/room topology retests passed.
+
+## How to verify
+
+```sh
+npm ci
+npm test
+npm run lint
+npm audit --audit-level=high
+npm run test:deployment
+```
+
+Use <https://family-doodle-relay.sociobot.in/demo> for the one-click isolated sample. The complete independent report is `.factory/verification-5.md`.
+
+## Known gaps
+
+No product defects found. Docker is not installed in this verifier container, so the local image build could not be independently executed; the compiled release binary and live candidate were verified instead.
+
+---
+
+# Repair handoff — historical context
 
 ## Root cause and repair
 
