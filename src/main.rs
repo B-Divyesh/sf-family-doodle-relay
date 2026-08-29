@@ -211,6 +211,8 @@ async fn open_database() -> (SqlitePool, Option<Arc<DatabaseSnapshot>>) {
         return (pool, None);
     }
 
+    require_container_app_data_mount();
+
     // SQLite is kept on the container filesystem, where its locking protocol is
     // reliable. After every room mutation, the completed database file is copied
     // to the mounted durable store. Mounting SQLite itself over SMB caused lock
@@ -232,6 +234,31 @@ async fn open_database() -> (SqlitePool, Option<Arc<DatabaseSnapshot>>) {
             persisted_path,
         })),
     )
+}
+
+fn require_container_app_data_mount() {
+    // Container Apps jobs also expose a replica name, including the factory
+    // worker that runs local verification. Only a serving Container App has
+    // the app/revision pair whose topology this guard protects.
+    let in_container_app = env::var_os("CONTAINER_APP_NAME").is_some()
+        || env::var_os("CONTAINER_APP_REVISION").is_some();
+    if !in_container_app {
+        return;
+    }
+    let mount_info = fs::read_to_string("/proc/self/mountinfo")
+        .expect("read mount table before opening production room store");
+    assert!(
+        has_data_mount(&mount_info),
+        "refusing to start in Azure Container Apps without the durable /data volume"
+    );
+}
+
+fn has_data_mount(mount_info: &str) -> bool {
+    mount_info.lines().any(|line| {
+        line.split_ascii_whitespace()
+            .nth(4)
+            .is_some_and(|mount_point| mount_point == "/data")
+    })
 }
 
 fn sync_snapshot(state: &AppState) -> io::Result<()> {
@@ -913,5 +940,17 @@ mod tests {
         assert_eq!(room.guesses, vec!["A house at sea"]);
         restored.close().await;
         let _ = fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn production_mount_guard_rejects_the_generic_factory_topology() {
+        let container_root_only = "83 72 0:66 / / rw,relatime - overlay overlay rw";
+        assert!(!has_data_mount(container_root_only));
+
+        let durable_volume = concat!(
+            "83 72 0:66 / / rw,relatime - overlay overlay rw\n",
+            "91 83 0:74 / /data rw,relatime - cifs //relay.file.core.windows.net/share rw"
+        );
+        assert!(has_data_mount(durable_volume));
     }
 }

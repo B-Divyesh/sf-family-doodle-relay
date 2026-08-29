@@ -26,8 +26,8 @@ Open <http://localhost:5173>. Vite proxies room and WebSocket traffic to the Rus
 ```sh
 npm test
 npm run build      # browser files land in dist/
-cargo build
-npx tsc -p frontend/tsconfig.json --noEmit
+npm run lint
+npm run test:deployment
 ```
 
 The claim tests are listed in [`.factory/claims.json`](.factory/claims.json). `npm test -- --grep @claim:` runs only those browser checks.
@@ -49,7 +49,7 @@ This browser keeps private room keys and an optional purchase license in its sto
 
 ## Deploy
 
-The factory builds the root `Dockerfile` and supplies `PORT` plus `BUILD_SHA`. Use `./scripts/deploy-container.sh` for the production container configuration. `FACTORY_SOCIOBOT_KEY` may be supplied to authenticate server-side license verification; it is optional and never embedded in the image. DNS, billing product registration, and infrastructure stay outside this repository.
+The factory builds the root `Dockerfile` and supplies `PORT` plus `BUILD_SHA`. Use `./scripts/deploy-container.sh` so the release waits for its single durable room owner and checks the live build identity. `FACTORY_SOCIOBOT_KEY` may be supplied to authenticate server-side license verification; it is optional and never embedded in the image. DNS, billing product registration, and infrastructure stay outside this repository.
 
 ## License
 
