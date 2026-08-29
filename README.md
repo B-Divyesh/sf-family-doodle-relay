@@ -8,7 +8,7 @@ There are no public rooms, profiles, ads, or open chat. A room allows two player
 
 ## Try the sandbox
 
-Open `/demo` or <https://family-doodle-relay.sociobot.in/demo>. It starts with a sample relay and does not save changes. See [`.factory/demo.md`](.factory/demo.md).
+Open `/?demo=1` or <https://family-doodle-relay.sociobot.in/?demo=1>. It starts with a sample relay and does not save changes. `/demo` is an equivalent direct route. See [`.factory/demo.md`](.factory/demo.md).
 
 ## Run locally
 

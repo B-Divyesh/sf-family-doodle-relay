@@ -2,16 +2,69 @@ import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { PNG } from 'pngjs';
 
-test('landing and legal routes meet the page baseline', async ({ page }) => {
-  for (const route of ['/', '/demo', '/play', '/privacy', '/terms', '/not-a-page']) {
-    await page.goto(route);
+test('real routes expose complete metadata and meet the page baseline', async ({ page }) => {
+  const routes = [
+    ['/', 'Family Doodle Relay — Draw together remotely', 200],
+    ['/?demo=1', 'Demo — Family Doodle Relay', 200],
+    ['/demo', 'Demo — Family Doodle Relay', 200],
+    ['/play', 'Start a relay — Family Doodle Relay', 200],
+    ['/privacy', 'Privacy — Family Doodle Relay', 200],
+    ['/terms', 'Terms — Family Doodle Relay', 200],
+    ['/not-a-page', 'Page not found — Family Doodle Relay', 404],
+  ] as const;
+  for (const [route, title, status] of routes) {
+    const response = await page.goto(route);
+    expect(response?.status()).toBe(status);
     await expect(page.locator('html')).toHaveAttribute('lang', 'en');
     await expect(page.locator('main')).toHaveCount(1);
     await expect(page.locator('h1')).toHaveCount(1);
-    await expect(page).toHaveTitle(/Family Doodle Relay/);
+    await expect(page).toHaveTitle(title);
+    await expect(page.locator('meta[name="description"]')).toHaveAttribute('content', /\S/);
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', /^https:\/\/family-doodle-relay\.sociobot\.in\//);
+    await expect(page.locator('meta[property="og:title"]')).toHaveAttribute('content', title);
+    await expect(page.locator('meta[property="og:description"]')).toHaveAttribute('content', /\S/);
+    await expect(page.locator('meta[name="twitter:title"]')).toHaveAttribute('content', title);
+    await expect(page.locator('meta[name="twitter:description"]')).toHaveAttribute('content', /\S/);
+    await expect(page.locator('link[rel="apple-touch-icon"]')).toHaveAttribute('href', '/apple-touch-icon.png');
     const results = await new AxeBuilder({ page }).analyze();
     expect(results.violations.filter(v => ['serious', 'critical'].includes(v.impact || ''))).toEqual([]);
   }
+});
+
+test('route changes update focus, history, legal links, and the designed 404', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('contentinfo').getByRole('link', { name: 'Privacy' }).click();
+  await expect(page).toHaveURL('/privacy');
+  await expect(page).toHaveTitle('Privacy — Family Doodle Relay');
+  await expect(page.getByRole('heading', { level: 1 })).toBeFocused();
+  await page.goBack();
+  await expect(page).toHaveURL('/');
+  await expect(page.getByRole('heading', { level: 1 })).toBeFocused();
+  await page.getByRole('contentinfo').getByRole('link', { name: 'Terms' }).click();
+  await expect(page).toHaveURL('/terms');
+  await expect(page.getByRole('heading', { level: 1 })).toBeFocused();
+  await page.evaluate(() => {
+    history.pushState({}, '', '/missing-client-route');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  });
+  await expect(page.getByRole('heading', { name: 'Page not found' })).toBeFocused();
+  await expect(page).toHaveTitle('Page not found — Family Doodle Relay');
+  await expect(page.getByRole('link', { name: 'Return to the front page' })).toHaveAttribute('href', '/');
+});
+
+test('first-screen sample action opens an isolated resettable query demo in one click', async ({ page }) => {
+  await page.goto('/');
+  const action = page.getByRole('link', { name: 'Try it with sample data' });
+  await expect(action).toHaveAttribute('href', '/?demo=1');
+  await action.click();
+  await expect(page).toHaveURL('/?demo=1');
+  await expect(page.getByText('Demo — sample data, nothing is saved')).toBeVisible();
+  await page.getByRole('button', { name: 'Add a sample mark' }).click();
+  await page.getByRole('button', { name: 'Clear drawing' }).click();
+  await page.getByRole('button', { name: 'Reset demo' }).click();
+  await expect(page.getByText('A house at sea')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Start for real' })).toHaveAttribute('href', '/');
+  expect(await page.evaluate(() => ({ local: Object.keys(localStorage), session: Object.keys(sessionStorage), cookies: document.cookie }))).toEqual({ local: [], session: [], cookies: '' });
 });
 
 test('phone layout has no horizontal overflow and keyboard actions work', async ({ page }) => {
@@ -38,7 +91,8 @@ test('phone layout has no horizontal overflow and keyboard actions work', async 
 });
 
 test('offline demo reload includes the precached built shell', async ({ page, context }) => {
-  await page.goto('/demo');
+  await context.setExtraHTTPHeaders({ 'X-Forwarded-For': '198.51.100.96' });
+  await page.goto('/?demo=1');
   await page.evaluate(() => navigator.serviceWorker.ready);
   await page.reload();
   await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
@@ -114,6 +168,19 @@ test('@claim:png-export finished relay downloads a PNG with every shown relay en
   await expect(page.getByText('Turn 1 guess: “A house at sea”')).toBeVisible();
   await expect(page.getByText('Turn 2 guess: “A whale carrying a tiny village”')).toBeVisible();
   expect(await page.locator('.result-canvas').count()).toBe(2);
+});
+
+test('@claim:download-local downloading a PNG strip sends no data to another service', async ({ page }) => {
+  const requests: string[] = [];
+  page.on('request', request => requests.push(request.url()));
+  await page.goto('/?demo=1');
+  await page.getByRole('button', { name: 'Finish this turn' }).click();
+  const downloadEvent = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download the PNG strip' }).click();
+  const download = await downloadEvent;
+  expect(download.suggestedFilename()).toBe('family-doodle-relay.png');
+  expect(requests.length).toBeGreaterThan(2);
+  expect([...new Set(requests.map(url => new URL(url).origin))]).toEqual(['http://127.0.0.1:8080']);
 });
 
 test('@claim:two-person-limit a third player cannot enter', async ({ request }) => {

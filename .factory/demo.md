@@ -1,6 +1,6 @@
 # Demo sandbox
 
-- URL: `http://localhost:8080/demo` (production: `https://family-doodle-relay.sociobot.in/demo`).
+- URL: `http://localhost:8080/?demo=1` (production: `https://family-doodle-relay.sociobot.in/?demo=1`). `/demo` is an equivalent direct route.
 - Sample: a two-person relay on turn three. A house-at-sea drawing, one guess, and a connected sample partner are already visible.
 - Actions: add a mark, undo, clear, finish the turn, and download the completed PNG strip.
 - Reset: choose **Reset demo** in the persistent banner.

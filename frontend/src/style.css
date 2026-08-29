@@ -138,8 +138,9 @@ input[aria-invalid='true'] { border-color: var(--danger); }
   .room-masthead { grid-template-columns: 1fr; }
   .result-panels { grid-template-columns: 1fr; }
   .site-footer { grid-template-columns: 1fr; }
-  .demo-banner { align-items: flex-start; }
-  .demo-banner > div { flex-direction: column; gap: 4px; align-items: flex-end; }
+  .demo-banner { align-items: stretch; flex-direction: column; gap: 4px; padding-block: 10px; }
+  .demo-banner > div { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: stretch; }
+  .demo-banner button, .demo-banner a { width: 100%; text-align: center; }
 }
 
 @media (prefers-reduced-motion: reduce) {

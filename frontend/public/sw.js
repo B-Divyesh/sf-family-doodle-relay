@@ -1,5 +1,5 @@
-const CACHE = 'relay-shell-v2';
-const DOCUMENTS = ['/', '/demo'];
+const CACHE = 'relay-shell-v3';
+const DOCUMENTS = ['/', '/?demo=1', '/demo'];
 const STATIC = ['/relay-hero-mobile.avif', '/favicon.svg'];
 
 async function precacheShell() {
