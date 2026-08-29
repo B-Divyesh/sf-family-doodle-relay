@@ -69,6 +69,24 @@ test('@claim:demo-sandbox @claim:privacy-defaults sample demo stays isolated and
   expect(await context.cookies()).toEqual([]);
 });
 
+test('@claim:browser-storage room credentials stay in this browser storage', async ({ page, context }) => {
+  await page.goto('/play');
+  await page.getByRole('button', { name: 'Make a private room' }).click();
+  await expect(page).toHaveURL(/\/room\/[A-Z0-9]{12}$/);
+  const keys = await page.evaluate(() => Object.keys(localStorage).filter(key => key.startsWith('relay:room:')));
+  expect(keys).toHaveLength(1);
+  const credentials = await page.evaluate(key => JSON.parse(localStorage.getItem(key) || 'null'), keys[0]);
+  expect(credentials).toMatchObject({ role: 'host', code: expect.any(String), token: expect.any(String) });
+  expect(await page.evaluate(() => Object.keys(sessionStorage))).toEqual([]);
+  expect(await context.cookies()).toEqual([]);
+});
+
+test('@claim:health-build health reports the running build identity', async ({ request }) => {
+  const response = await request.get('/health');
+  expect(response.status()).toBe(200);
+  expect(await response.json()).toMatchObject({ status: 'ok', build_sha: expect.any(String) });
+});
+
 test('@claim:png-export finished relay downloads a PNG with every shown relay entry', async ({ page }, testInfo) => {
   await page.goto('/demo');
   await page.getByRole('button', { name: 'Finish this turn' }).click();
@@ -175,11 +193,13 @@ test('@claim:rate-limit rate limiter returns 429 with Retry-After per trusted in
   const client = await playwright.request.newContext({ baseURL: 'http://127.0.0.1:8080' });
   const responses = await Promise.all(Array.from({ length: 55 }, (_, index) => client.get('/api/rooms/NOT-A-ROOM?token=none', { headers: { 'X-Forwarded-For': `203.0.113.${index}, 198.51.100.44` } })));
   const limited = responses.filter(response => response.status() === 429);
-  expect(limited.length).toBeGreaterThan(0);
+  expect(responses.filter(response => response.status() !== 429)).toHaveLength(20);
+  expect(limited).toHaveLength(35);
   expect(limited[0].headers()['retry-after']).toBe('1');
   const pages = await Promise.all(Array.from({ length: 55 }, (_, index) => client.get('/privacy', { headers: { 'X-Forwarded-For': `203.0.113.${index}, 198.51.100.45` } })));
   const limitedPages = pages.filter(response => response.status() === 429);
-  expect(limitedPages.length).toBeGreaterThan(0);
+  expect(pages.filter(response => response.status() !== 429)).toHaveLength(20);
+  expect(limitedPages).toHaveLength(35);
   expect(limitedPages[0].headers()['retry-after']).toBe('1');
   await client.dispose();
 });

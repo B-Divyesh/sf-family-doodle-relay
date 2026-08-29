@@ -39,17 +39,17 @@ docker build --build-arg BUILD_SHA=local -t family-doodle-relay .
 docker run --rm -p 8080:8080 -e PORT=8080 family-doodle-relay
 ```
 
-The container needs no other environment variables. `GET /health` returns the build SHA. Rooms live in `/data/family-doodle-relay.db`, are deleted at their four-hour expiry, and the container deployment is deliberately pinned to one replica so a relay stays on its private temporary store.
+`GET /health` returns the running build identity. Rooms are deleted at their four-hour expiry. The server allows 20 requests per second for each trusted client connection on every non-health route.
 
 ## Architecture and privacy
 
-The browser app uses Vite and TypeScript. Rust, Axum, and a short-lived SQLite room store serve the app. Live state updates keep the active turn in place, so a typed guess, focus, validation message, and a pointer stroke survive sync messages. Every non-health route is rate limited per client by the right-most address added by the factory ingress.
+The browser app uses Vite and TypeScript. Rust, Axum, and a short-lived SQLite room store serve the app. Every non-health route is rate limited per client by the right-most address added by the factory ingress.
 
-Browser storage holds private room keys and an optional purchase license. The server does not ask for names, ages, email addresses, or profiles. See `/privacy` and `/terms`.
+This browser keeps private room keys and an optional purchase license in its storage. The server does not ask for names, ages, email addresses, or profiles. See `/privacy` and `/terms`.
 
 ## Deploy
 
-The factory builds the root `Dockerfile` and supplies `PORT` plus `BUILD_SHA`. The Azure Container App deployment is configured with `minReplicas: 1` and `maxReplicas: 1`, which is required for the container-local temporary room store. `FACTORY_SOCIOBOT_KEY` may be supplied to authenticate server-side license verification; it is optional and never embedded in the image. DNS, billing product registration, and infrastructure stay outside this repository.
+The factory builds the root `Dockerfile` and supplies `PORT` plus `BUILD_SHA`. Use `./scripts/deploy-container.sh` for the production container configuration. `FACTORY_SOCIOBOT_KEY` may be supplied to authenticate server-side license verification; it is optional and never embedded in the image. DNS, billing product registration, and infrastructure stay outside this repository.
 
 ## License
 

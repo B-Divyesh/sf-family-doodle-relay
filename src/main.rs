@@ -207,7 +207,10 @@ async fn open_database() -> SqlitePool {
         .expect("open SQLite room store")
 }
 async fn initialize_database(db: &SqlitePool) {
-    sqlx::query("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;")
+    // The production room file is mounted from Azure Files. DELETE journaling
+    // keeps the lock in the database file, rather than relying on WAL's
+    // sidecar shared-memory file during a revision hand-off.
+    sqlx::query("PRAGMA journal_mode=DELETE; PRAGMA busy_timeout=5000;")
         .execute(db)
         .await
         .expect("configure SQLite");
@@ -708,5 +711,66 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(count, 0);
+    }
+
+    #[tokio::test]
+    async fn room_is_visible_to_an_independent_database_connection() {
+        let path = std::env::temp_dir().join(format!("family-doodle-relay-{}.db", Uuid::new_v4()));
+        let url = format!("sqlite:{}?mode=rwc", path.display());
+        let first = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(&url)
+            .await
+            .unwrap();
+        initialize_database(&first).await;
+        let second = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(&url)
+            .await
+            .unwrap();
+        initialize_database(&second).await;
+
+        let now = now_secs();
+        let room = Room {
+            code: "SHAREDROOM12".into(),
+            host_token: "host-token".into(),
+            guest_token: None,
+            phase: 0,
+            total_turns: 4,
+            deadline: None,
+            strokes: vec![],
+            snapshots: vec![],
+            guesses: vec![],
+            created_at: now,
+            expires_at: now + ROOM_TTL,
+            host_seen: 0,
+            guest_seen: 0,
+        };
+        save_room(&first, &room).await.unwrap();
+
+        let fetched = fetch_active_room(&second, "SHAREDROOM12").await.unwrap();
+        assert_eq!(fetched.host_token, "host-token");
+        assert!(fetched.guest_token.is_none());
+
+        let second_state = AppState {
+            db: second.clone(),
+            limits: Arc::new(Mutex::new(HashMap::new())),
+            writes: Arc::new(Mutex::new(())),
+            verify_url: "http://127.0.0.1/unused".into(),
+        };
+        let joined = join_room(
+            State(second_state),
+            Json(JoinRoom {
+                code: "SHAREDROOM12".into(),
+            }),
+        )
+        .await;
+        assert_eq!(joined.status(), StatusCode::OK);
+
+        let reconnected = fetch_active_room(&first, "SHAREDROOM12").await.unwrap();
+        assert!(reconnected.guest_token.is_some());
+        first.close().await;
+        second.close().await;
+        let _ = std::fs::remove_file(path);
     }
 }
