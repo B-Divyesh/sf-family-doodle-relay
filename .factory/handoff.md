@@ -1,39 +1,57 @@
-# Family Doodle Relay — polish round 2 handoff
+# Family Doodle Relay — independent verification 7 handoff
 
-- Work order: `family-doodle-relay-polish-2`
-- Repair implementation: `2a932fdc86a0c92aa6b1a47fd00ba79dcad4f08f`
-- Release documentation: `d5df5f519368eb18adc74e23558c634edca36df2`
-- Live build: `d5df5f519368eb18adc74e23558c634edca36df2`
+- Work order: `family-doodle-relay-verify-7`
+- Candidate: `2dbeb77c46a338ee145d1dc6ad3ebe8fdde4221e`
 - Live URL: <https://family-doodle-relay.sociobot.in>
-- Demo URL: <https://family-doodle-relay.sociobot.in/?demo=1>
+- Verification date: 29 August 2026
+- Result: **FAIL — do not release**
 
-## Done
+## Release blockers
 
-All review-2 findings and all earlier review/polish findings are closed. The demo now proves real storage isolation, the claim inventory has 14 independently runnable observable tests, free four-turn play is tested, legal/deployment wording only makes statements this product can prove, PNG strip terminology is consistent, and every mobile interactive control is at least 44 px.
+The candidate Azure revision `sf-family-doodle-relay--0000029` is unhealthy and crash-looping because it has no durable `/data` mount. Its log says `refusing to start in Azure Container Apps without the durable /data volume`. The live health endpoint therefore still reports the preceding build `d5df5f519368eb18adc74e23558c634edca36df2`, not the candidate. The current app template also permits three replicas, lacks the required volume/mount, and has two active revisions. The repository's deployment validator fails against this live configuration.
 
-`./scripts/deploy-container.sh` released the documented commit. The app is revision `sf-family-doodle-relay--0000028`, the only active revision, with one replica and 100% traffic. `/health` reports the exact live build above.
+A valid unbroken 80-character guess also expands the finished 390 px page to 925 px wide. The supported input boundary must wrap without horizontal scrolling.
 
-## Verification
+The terms-page promise that a host may end a room at any time is not listed in `.factory/claims.json`, although independent live testing confirmed that the behavior works. Axe additionally reports a moderate nested complementary-landmark issue.
 
-- Fresh clone `/tmp/family-doodle-relay-polish2.qsYdkf`: `npm ci`, then every exact command in `.factory/claims.json` independently — **14/14 passed**.
-- Local: `npm test` — **7 Rust + 4 deployment-contract + 18 Playwright passed**; `npm run lint` and `npm run build` passed.
-- Cold live `verify-url.sh`: root and `?demo=1` both returned 200 with no console errors, `<html lang="en">`, one h1, main landmark, complete alt text, and labelled buttons. Evidence: [root](polish-2-evidence/live-root/verify.json) and [demo](polish-2-evidence/live-demo/verify.json).
-- Live Axe Playwright sweep: `/`, `/?demo=1`, `/demo`, `/play`, `/privacy`, `/terms`, and `/not-a-page` each had 0 serious/critical violations; the unknown URL returned HTTP 404 with its route title.
-- Live 390 px sweep: no horizontal overflow and every visible link, button, input, and keyboard canvas measured at least 44×44 px.
-- Live demo recheck: seeded real room/license/session/cookie values remained byte-for-byte unchanged through finish, reset, and Start for real; it made 0 API and 0 off-origin requests. Excluded public/account/chat/ads endpoints returned 400 or 404.
+Full evidence and exact results are in [`.factory/verification-7.md`](verification-7.md).
 
-## Run
+## What passed
+
+- Mandatory cold first-read and one-click sample-demo gate.
+- All 14 exact claim commands after `npm ci`.
+- `npm test`: 7 Rust, 4 deployment-contract, and 18 Playwright tests.
+- `npm run typecheck`, `npm run lint`, `npm run build`, `cargo build --release`, and npm audit.
+- Live two-context four-turn relay, reconnection, two-person limit, host disconnect, PNG download, free/premium boundary, and checkout redirect.
+- Live allowance: 20 requests per second per client for both API and page buckets; excess returns 429 with `Retry-After: 1`.
+- Demo storage/network isolation, same-origin runtime traffic, security headers, offline demo reload, keyboard focus, reduced motion, and zero serious/critical Axe findings.
+- Lighthouse mobile: 100/100/100/100; LCP 1.6 s, TBT 50 ms, CLS 0.
+
+## Reproduce
 
 ```sh
 npm ci
-npm run dev
 npm test
+npm run typecheck
 npm run lint
 npm run build
+cargo build --release
+curl -sS https://family-doodle-relay.sociobot.in/health
 ```
 
-Open `http://localhost:5173` for development or `http://localhost:8080/?demo=1` with the Rust service. Deploy with `./scripts/deploy-container.sh`.
+Read-only live topology checks:
 
-## Known gaps
+```sh
+az containerapp show --resource-group sociobot --name sf-family-doodle-relay -o json
+az containerapp revision list --resource-group sociobot --name sf-family-doodle-relay -o json
+az containerapp replica list --resource-group sociobot --name sf-family-doodle-relay --revision sf-family-doodle-relay--0000029 -o json
+```
 
-None. Docker is built by ACR during deployment; this worker has no local Docker executable.
+## Next steps
+
+1. Redeploy using `scripts/deploy-container.sh` so the Azure Files `/data` mount, single replica, one active revision, and exact health build identity are all enforced.
+2. Fix result-quote wrapping and cover the 80-character mobile boundary.
+3. Add the missing host-disconnect claim test and resolve the moderate Axe landmark finding.
+4. Rerun the full claim list and live verification. Do not accept until the candidate revision is healthy and `/health` reports its full SHA.
+
+No product code was modified during verification. Docker was unavailable in this worker; its build steps were executed independently.
