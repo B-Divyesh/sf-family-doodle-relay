@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::{sqlite::SqlitePoolOptions, Row, SqlitePool};
 use std::{
     collections::HashMap,
-    env,
+    env, fs, io,
     net::SocketAddr,
     path::PathBuf,
     sync::Arc,
@@ -41,9 +41,14 @@ const PRESENCE_SECONDS: u64 = 3;
 #[derive(Clone)]
 struct AppState {
     db: SqlitePool,
+    snapshot: Option<Arc<DatabaseSnapshot>>,
     limits: Arc<Mutex<HashMap<String, LimitWindow>>>,
     writes: Arc<Mutex<()>>,
     verify_url: String,
+}
+struct DatabaseSnapshot {
+    working_path: PathBuf,
+    persisted_path: PathBuf,
 }
 struct LimitWindow {
     started: Instant,
@@ -137,19 +142,20 @@ async fn main() {
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
         )
         .init();
-    let db = open_database().await;
+    let (db, snapshot) = open_database().await;
     initialize_database(&db).await;
     info!(
         config = if env::var("DATABASE_URL").is_ok() {
             "supplied DATABASE_URL; supplied PORT if set"
         } else {
-            "generated persistent /data SQLite room store; supplied PORT if set"
+            "generated local SQLite room store with durable /data snapshots; supplied PORT if set"
         },
         build_sha = BUILD_SHA,
         "server configuration ready"
     );
     let state = AppState {
         db,
+        snapshot,
         limits: Arc::new(Mutex::new(HashMap::new())),
         writes: Arc::new(Mutex::new(())),
         verify_url: env::var("SOCIOBOT_VERIFY_URL").unwrap_or_else(|_| {
@@ -195,21 +201,67 @@ async fn main() {
     .await
     .expect("server");
 }
-async fn open_database() -> SqlitePool {
-    let url = env::var("DATABASE_URL").unwrap_or_else(|_| {
-        std::fs::create_dir_all("/data").expect("create /data");
-        "sqlite:/data/family-doodle-relay.db?mode=rwc".into()
-    });
-    SqlitePoolOptions::new()
+async fn open_database() -> (SqlitePool, Option<Arc<DatabaseSnapshot>>) {
+    if let Ok(url) = env::var("DATABASE_URL") {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(&url)
+            .await
+            .expect("open supplied room store");
+        return (pool, None);
+    }
+
+    // SQLite is kept on the container filesystem, where its locking protocol is
+    // reliable. After every room mutation, the completed database file is copied
+    // to the mounted durable store. Mounting SQLite itself over SMB caused lock
+    // errors during Container App revision hand-offs.
+    let persisted_path = PathBuf::from("/data/family-doodle-relay.db");
+    fs::create_dir_all("/data").expect("create /data");
+    let working_path = env::temp_dir().join("family-doodle-relay.db");
+    restore_snapshot(&persisted_path, &working_path).expect("restore durable room snapshot");
+    let url = format!("sqlite:{}?mode=rwc", working_path.display());
+    let pool = SqlitePoolOptions::new()
         .max_connections(1)
         .connect(&url)
         .await
-        .expect("open SQLite room store")
+        .expect("open SQLite room store");
+    (
+        pool,
+        Some(Arc::new(DatabaseSnapshot {
+            working_path,
+            persisted_path,
+        })),
+    )
+}
+
+fn sync_snapshot(state: &AppState) -> io::Result<()> {
+    let Some(snapshot) = &state.snapshot else {
+        return Ok(());
+    };
+    sync_snapshot_files(snapshot)
+}
+
+fn restore_snapshot(
+    persisted_path: &std::path::Path,
+    working_path: &std::path::Path,
+) -> io::Result<()> {
+    let _ = fs::remove_file(working_path.with_extension("db-journal"));
+    if persisted_path.exists() {
+        fs::copy(persisted_path, working_path)?;
+    } else {
+        let _ = fs::remove_file(working_path);
+    }
+    Ok(())
+}
+
+fn sync_snapshot_files(snapshot: &DatabaseSnapshot) -> io::Result<()> {
+    let staged_path = snapshot.persisted_path.with_extension("db.next");
+    fs::copy(&snapshot.working_path, &staged_path)?;
+    fs::rename(staged_path, &snapshot.persisted_path)
 }
 async fn initialize_database(db: &SqlitePool) {
-    // The production room file is mounted from Azure Files. DELETE journaling
-    // keeps the lock in the database file, rather than relying on WAL's
-    // sidecar shared-memory file during a revision hand-off.
+    // DELETE journaling keeps each completed SQLite write in one database file,
+    // so the finished file can be copied as a durable revision-handoff snapshot.
     sqlx::query("PRAGMA journal_mode=DELETE; PRAGMA busy_timeout=5000;")
         .execute(db)
         .await
@@ -366,6 +418,13 @@ async fn create_room(State(state): State<AppState>, Json(input): Json<CreateRoom
             "The room could not be made. Try again.",
         );
     };
+    if let Err(err) = sync_snapshot(&state) {
+        warn!(?err, "could not persist room snapshot");
+        return error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "The room could not be made. Try again.",
+        );
+    }
     (
         StatusCode::CREATED,
         Json(RoomCredentials {
@@ -413,6 +472,13 @@ async fn join_room(State(state): State<AppState>, Json(input): Json<JoinRoom>) -
     room.guest_token = Some(token.clone());
     room.deadline = Some(now_secs() + TURN_SECONDS);
     if save_room(&state.db, &room).await.is_err() {
+        return error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "The room could not be joined. Try again.",
+        );
+    }
+    if let Err(err) = sync_snapshot(&state) {
+        warn!(?err, "could not persist room snapshot");
         return error(
             StatusCode::SERVICE_UNAVAILABLE,
             "The room could not be joined. Try again.",
@@ -513,19 +579,33 @@ async fn handle_event(state: &AppState, code: &str, token: &str, event: ClientEv
                 .bind(code)
                 .execute(&state.db)
                 .await;
+            if let Err(err) = sync_snapshot(state) {
+                warn!(?err, "could not persist room snapshot");
+            }
             return;
         }
         _ => {}
     }
-    let _ = save_room(&state.db, &room).await;
+    if save_room(&state.db, &room).await.is_ok() {
+        if let Err(err) = sync_snapshot(state) {
+            warn!(?err, "could not persist room snapshot");
+        }
+    }
 }
 async fn authorized_room(state: &AppState, code: &str, token: &str) -> Option<(Room, String)> {
-    let mut room = fetch_active_room(&state.db, code).await?;
+    let Some(mut room) = fetch_active_room(&state.db, code).await else {
+        if let Err(err) = sync_snapshot(state) {
+            warn!(?err, "could not persist room snapshot");
+        }
+        return None;
+    };
     let before = (room.phase, room.deadline);
     settle_clock(&mut room);
     let role = role_for(&room, token)?.to_string();
-    if before != (room.phase, room.deadline) {
-        let _ = save_room(&state.db, &room).await;
+    if before != (room.phase, room.deadline) && save_room(&state.db, &room).await.is_ok() {
+        if let Err(err) = sync_snapshot(state) {
+            warn!(?err, "could not persist room snapshot");
+        }
     }
     Some((room, role))
 }
@@ -575,6 +655,9 @@ async fn set_presence(state: &AppState, code: &str, role: &str) {
         .bind(code)
         .execute(&state.db)
         .await;
+    if let Err(err) = sync_snapshot(state) {
+        warn!(?err, "could not persist room snapshot");
+    }
 }
 async fn prune_rooms(db: &SqlitePool) {
     let _ = sqlx::query("DELETE FROM rooms WHERE expires_at <= ?")
@@ -754,6 +837,7 @@ mod tests {
 
         let second_state = AppState {
             db: second.clone(),
+            snapshot: None,
             limits: Arc::new(Mutex::new(HashMap::new())),
             writes: Arc::new(Mutex::new(())),
             verify_url: "http://127.0.0.1/unused".into(),
@@ -772,5 +856,62 @@ mod tests {
         first.close().await;
         second.close().await;
         let _ = std::fs::remove_file(path);
+    }
+
+    #[tokio::test]
+    async fn completed_room_snapshot_restores_for_a_new_owner() {
+        let directory =
+            std::env::temp_dir().join(format!("family-doodle-relay-snapshot-{}", Uuid::new_v4()));
+        fs::create_dir_all(&directory).unwrap();
+        let working_path = directory.join("working.db");
+        let persisted_path = directory.join("persisted.db");
+        let working_url = format!("sqlite:{}?mode=rwc", working_path.display());
+        let first = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(&working_url)
+            .await
+            .unwrap();
+        initialize_database(&first).await;
+        let now = now_secs();
+        save_room(
+            &first,
+            &Room {
+                code: "HANDOFFROOM1".into(),
+                host_token: "host-token".into(),
+                guest_token: Some("guest-token".into()),
+                phase: 1,
+                total_turns: 4,
+                deadline: Some(now + TURN_SECONDS),
+                strokes: vec![],
+                snapshots: vec![],
+                guesses: vec!["A house at sea".into()],
+                created_at: now,
+                expires_at: now + ROOM_TTL,
+                host_seen: now,
+                guest_seen: now,
+            },
+        )
+        .await
+        .unwrap();
+        sync_snapshot_files(&DatabaseSnapshot {
+            working_path,
+            persisted_path: persisted_path.clone(),
+        })
+        .unwrap();
+        first.close().await;
+
+        let restored_path = directory.join("restored.db");
+        restore_snapshot(&persisted_path, &restored_path).unwrap();
+        let restored_url = format!("sqlite:{}?mode=rwc", restored_path.display());
+        let restored = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(&restored_url)
+            .await
+            .unwrap();
+        let room = fetch_active_room(&restored, "HANDOFFROOM1").await.unwrap();
+        assert_eq!(room.guest_token.as_deref(), Some("guest-token"));
+        assert_eq!(room.guesses, vec!["A house at sea"]);
+        restored.close().await;
+        let _ = fs::remove_dir_all(directory);
     }
 }
