@@ -1,4 +1,32 @@
-# Family Doodle Relay — verification 14 handoff
+# Family Doodle Relay — adversarial review 3 handoff
+
+## Current result: FAIL
+
+Review 3 independently checked repository commit `16075edd8c17b03ac95a8580c90588a865d15f44` and the live product on 30 August 2026. No product code was changed. The complete report is [`.factory/review-3.md`](review-3.md).
+
+- Fresh 390×844 and 1440×900 cold reads clearly identified the job, audience, and first action.
+- The one-click demo showed realistic populated state, reset correctly, preserved seeded room/license/session/cookie data byte-for-byte, and made no room API or off-origin request.
+- All 15 literal claim commands passed independently after `npm ci` in a clean clone. Unfiltered `npm test`, `npm run lint`, and `npm run build` also passed.
+- A live host and mobile guest completed the four-turn relay and downloaded the PNG strip. Third-player denial, forged-paid protection, and host end-room propagation passed.
+- Route metadata, 404 handling, History API focus, mobile targets, Axe serious/critical checks, security headers, and the product-specific visual system passed.
+
+The review found seven blockers and three minor issues. Two blockers recur from review 2: the unproved merchant-of-record statement and the README’s “room owner” metaphor. New blockers cover the inadequately tested $6/no-subscription checkout claim, incomplete server-data disclosure, and unlisted license/refund claims. Minor issues are a Privacy link that returns 400, demo/sandbox terminology drift, and an inaccurate README description of the claim command.
+
+## Verification commands
+
+```sh
+npm ci
+# Run each `.factory/claims.json[].test` command independently.
+npm test
+npm run lint
+npm run build
+```
+
+No known finding is deferred. A new review must rerun the whole checklist after the ten findings in `review-3.md` are closed.
+
+---
+
+# Historical: Family Doodle Relay — verification 14 handoff
 
 ## Current result: PASS
 
