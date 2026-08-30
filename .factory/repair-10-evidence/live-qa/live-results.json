@@ -1,0 +1,240 @@
+{
+  "checkedAt": "2026-08-30T02:51:53.922Z",
+  "base": "https://family-doodle-relay.sociobot.in",
+  "routes": {
+    "/": {
+      "status": 200,
+      "title": "Family Doodle Relay — Draw together remotely",
+      "lang": "en",
+      "h1Count": 1,
+      "mainCount": 1,
+      "missingAlt": 0,
+      "seriousCritical": [],
+      "errors": []
+    },
+    "/demo": {
+      "status": 200,
+      "title": "Demo — Family Doodle Relay",
+      "lang": "en",
+      "h1Count": 1,
+      "mainCount": 1,
+      "missingAlt": 0,
+      "seriousCritical": [],
+      "errors": []
+    },
+    "/play": {
+      "status": 200,
+      "title": "Start a relay — Family Doodle Relay",
+      "lang": "en",
+      "h1Count": 1,
+      "mainCount": 1,
+      "missingAlt": 0,
+      "seriousCritical": [],
+      "errors": []
+    },
+    "/privacy": {
+      "status": 200,
+      "title": "Privacy — Family Doodle Relay",
+      "lang": "en",
+      "h1Count": 1,
+      "mainCount": 1,
+      "missingAlt": 0,
+      "seriousCritical": [],
+      "errors": []
+    },
+    "/terms": {
+      "status": 200,
+      "title": "Terms — Family Doodle Relay",
+      "lang": "en",
+      "h1Count": 1,
+      "mainCount": 1,
+      "missingAlt": 0,
+      "seriousCritical": [],
+      "errors": []
+    },
+    "/not-a-page": {
+      "status": 404,
+      "title": "Page not found — Family Doodle Relay",
+      "lang": "en",
+      "h1Count": 1,
+      "mainCount": 1,
+      "missingAlt": 0,
+      "seriousCritical": [],
+      "errors": []
+    }
+  },
+  "browserErrors": [],
+  "firstRead": {
+    "status": 200,
+    "title": "Family Doodle Relay — Draw together remotely",
+    "h1": "Draw together from two places",
+    "audience": "For a child and trusted adult who want a calm game between calls.",
+    "primaryAction": "Try it with sample data",
+    "nextStep": "A sample relay opens next. Nothing is saved.",
+    "primaryFocus": {
+      "outline": "rgb(156, 47, 36) solid 4px",
+      "outlineColor": "rgb(156, 47, 36)",
+      "outlineWidth": "4px",
+      "outlineOffset": "3px"
+    }
+  },
+  "demo": {
+    "url": "https://family-doodle-relay.sociobot.in/?demo=1",
+    "banner": "Demo — sample data, nothing is saved\nReset demo\nStart for real",
+    "sampleHeading": "Add one surprising detail",
+    "download": {
+      "filename": "family-doodle-relay.png",
+      "width": 1200,
+      "height": 728
+    },
+    "storageUnchanged": true,
+    "beforeDemo": {
+      "local": {
+        "qa12:sentinel": "keep-local"
+      },
+      "session": {
+        "qa12:sentinel": "keep-session"
+      },
+      "cookie": "qa12=keep-cookie"
+    },
+    "afterDemo": {
+      "local": {
+        "qa12:sentinel": "keep-local"
+      },
+      "session": {
+        "qa12:sentinel": "keep-session"
+      },
+      "cookie": "qa12=keep-cookie"
+    },
+    "cookies": [
+      {
+        "name": "qa12",
+        "value": "keep-cookie",
+        "domain": "family-doodle-relay.sociobot.in",
+        "path": "/",
+        "expires": -1,
+        "httpOnly": false,
+        "secure": false,
+        "sameSite": "Lax"
+      }
+    ],
+    "requests": [
+      {
+        "url": "https://family-doodle-relay.sociobot.in/",
+        "method": "GET",
+        "type": "document"
+      },
+      {
+        "url": "https://family-doodle-relay.sociobot.in/assets/index-BCNqw358.js",
+        "method": "GET",
+        "type": "script"
+      },
+      {
+        "url": "https://family-doodle-relay.sociobot.in/assets/index-XybIPhcV.css",
+        "method": "GET",
+        "type": "stylesheet"
+      },
+      {
+        "url": "https://family-doodle-relay.sociobot.in/relay-hero.avif",
+        "method": "GET",
+        "type": "image"
+      },
+      {
+        "url": "https://family-doodle-relay.sociobot.in/relay-hero.avif",
+        "method": "GET",
+        "type": "image"
+      }
+    ],
+    "offOriginRequests": [],
+    "apiRequests": []
+  },
+  "serviceWorker": {
+    "before": {
+      "active": "activated",
+      "waiting": null,
+      "installing": null
+    },
+    "controlledOffline": true,
+    "offlineHeading": "Add one surprising detail"
+  },
+  "mobile": {
+    "beforeZoom": {
+      "scrollWidth": 390,
+      "clientWidth": 390
+    },
+    "afterZoom": {
+      "scrollWidth": 640,
+      "clientWidth": 390,
+      "h1Visible": true,
+      "mainVisible": true
+    },
+    "smallTargets": [],
+    "animationDurations": [
+      "1e-05s",
+      "1e-05s"
+    ],
+    "scrollBehavior": "auto",
+    "seriousCritical": []
+  },
+  "liveRelay": {
+    "createStatus": 201,
+    "joinStatus": 200,
+    "codeLength": 12,
+    "hostRole": "host",
+    "invalidJoin": {
+      "message": "The invite code has 12 letters and numbers. Check it and try again.",
+      "ariaInvalid": "true",
+      "focused": false
+    },
+    "timerAtStart": "00:45",
+    "blankGuess": {
+      "message": "Write a guess before sending it.",
+      "focused": true
+    },
+    "boundaryGuessLength": 80,
+    "guestFocusPreserved": true,
+    "hostHeading": "Your relay is finished",
+    "guestHeading": "Your relay is finished",
+    "snapshots": 2,
+    "guesses": [
+      "Turn 1 guess: “AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA”",
+      "Turn 2 guess: “A home riding a wave”"
+    ],
+    "download": {
+      "filename": "family-doodle-relay.png",
+      "width": 1200,
+      "height": 728
+    }
+  },
+  "boundaries": {
+    "malformed": {
+      "status": 422,
+      "body": "Failed to deserialize the JSON body into the target type: invalid type: string \"{broken\", expected struct JoinRoom at line 1 column 9"
+    },
+    "missingCode": {
+      "status": 404,
+      "body": "{\"error\":\"Room not found. Check the code and ask the host to keep the room open.\"}"
+    },
+    "firstJoin": 200,
+    "thirdJoin": {
+      "status": 409,
+      "body": "{\"error\":\"This room already has two players. Ask the host to make a new room.\"}"
+    },
+    "forgedPaid": {
+      "createStatus": 201,
+      "readStatus": 200,
+      "totalTurns": 4
+    },
+    "roomLifetimeSeconds": 14400,
+    "concurrentReads": [
+      200,
+      200,
+      200,
+      200,
+      200,
+      200,
+      200,
+      200
+    ]
+  }
+}
