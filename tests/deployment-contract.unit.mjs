@@ -4,9 +4,11 @@ import test from 'node:test';
 import {
   assertDeploymentContract,
   assertRevisionOwnership,
+  assertSourceIdentity,
   durableDeploymentPatch,
   deploymentContractErrors,
   revisionOwnershipErrors,
+  sourceIdentityErrors,
 } from '../scripts/deployment-contract.mjs';
 
 const image = 'sociobotregistry.azurecr.io/sf-family-doodle-relay:repairsha123';
@@ -258,7 +260,108 @@ test('regression V11-01: rejects candidate f2333f8 falling back to the old mount
   ]);
 });
 
-test('@claim:deployment-topology accepts only one ready app instance using the durable relay volume and current image', () => {
+test('regression V12-01: rejects activation-failed revision 0000041 and its hidden mounted owner', () => {
+  const verifierV12App = appWith({
+    containers: [{
+      name: 'app',
+      image: 'sociobotregistry.azurecr.io/sf-family-doodle-relay:8de1fb937699',
+      env: [{ name: 'PORT', value: '8080' }],
+      volumeMounts: null,
+    }],
+    scale: {
+      cooldownPeriod: 300,
+      minReplicas: 1,
+      maxReplicas: 3,
+      pollingInterval: 30,
+      rules: null,
+    },
+    volumes: null,
+  }, 'sf-family-doodle-relay--0000041');
+  verifierV12App.properties.latestReadyRevisionName = 'sf-family-doodle-relay--0000040';
+
+  assert.deepEqual(
+    deploymentContractErrors(
+      verifierV12App,
+      'sociobotregistry.azurecr.io/sf-family-doodle-relay:8de1fb937699',
+    ),
+    [
+      'maximum replicas must be 1',
+      'relay-data must be mounted at /data',
+      'relay-data must use the family-doodle-relay-data Azure Files storage',
+      'relay-data mount options must include uid=10001',
+      'relay-data mount options must include gid=10001',
+      'relay-data mount options must include file_mode=0770',
+      'relay-data mount options must include dir_mode=0770',
+      'latest revision is not ready',
+    ],
+  );
+  assert.deepEqual(revisionOwnershipErrors([
+    {
+      name: 'sf-family-doodle-relay--0000040',
+      properties: {
+        active: true,
+        healthState: 'Healthy',
+        runningState: 'RunningAtMaxScale',
+        replicas: 1,
+        trafficWeight: 0,
+      },
+    },
+    {
+      name: 'sf-family-doodle-relay--0000041',
+      properties: {
+        active: true,
+        healthState: 'Unhealthy',
+        runningState: 'ActivationFailed',
+        replicas: 1,
+        trafficWeight: 100,
+      },
+    },
+  ], 'sf-family-doodle-relay--0000041'), [
+    'exactly one revision must be active, found 2',
+    'active owner must be healthy',
+    'active owner must be running',
+  ]);
+});
+
+test('regression V12-02: rejects the unavailable requested SHA before a release starts', () => {
+  const requestedSha = '8de1fb7dcf1930585f27967ac544462a987f81de';
+  const availableSha = '8de1fb9376990e5e204cc32c0d6c1c016ab06b40';
+  const identity = {
+    requestedSha,
+    checkoutSha: availableSha,
+    remoteSha: availableSha,
+  };
+
+  assert.deepEqual(sourceIdentityErrors(identity), [
+    `checkout must match requested source ${requestedSha}`,
+    `origin/main must advertise requested source ${requestedSha}`,
+  ]);
+  assert.throws(
+    () => assertSourceIdentity(identity),
+    /source identity failed: checkout must match requested source/,
+  );
+});
+
+test('@claim:deployment-topology accepts only a pushed exact build with one ready durable app instance', () => {
+  const source = '0123456789abcdef0123456789abcdef01234567';
+  assert.deepEqual(assertSourceIdentity({
+    requestedSha: source,
+    checkoutSha: source,
+    remoteSha: source,
+    image: `sociobotregistry.azurecr.io/sf-family-doodle-relay:${source}`,
+    liveSha: source,
+  }), {
+    source,
+    remote: source,
+    image: `sociobotregistry.azurecr.io/sf-family-doodle-relay:${source}`,
+    live: source,
+  });
+  assert.throws(() => assertSourceIdentity({
+    requestedSha: source,
+    checkoutSha: source,
+    remoteSha: '76543210fedcba9876543210fedcba9876543210',
+  }), /origin\/main must advertise requested source/);
+
   const configuredDeployment = appWith({
     containers: [{
       name: 'app',
@@ -370,5 +473,37 @@ test('rejects an old active owner even when it has zero traffic', () => {
   ];
   assert.deepEqual(revisionOwnershipErrors(revisions, 'relay--repair'), [
     'exactly one revision must be active, found 2',
+  ]);
+});
+
+test('source identity accepts one full SHA across checkout, remote, image, and live health', () => {
+  const source = '0123456789abcdef0123456789abcdef01234567';
+  const identity = {
+    requestedSha: source,
+    checkoutSha: source,
+    remoteSha: source,
+    image: `sociobotregistry.azurecr.io/sf-family-doodle-relay:${source}`,
+    liveSha: source,
+  };
+
+  assert.deepEqual(assertSourceIdentity(identity), {
+    source,
+    remote: source,
+    image: identity.image,
+    live: source,
+  });
+});
+
+test('source identity rejects abbreviated image tags and stale live health', () => {
+  const source = '0123456789abcdef0123456789abcdef01234567';
+  assert.deepEqual(sourceIdentityErrors({
+    requestedSha: source,
+    checkoutSha: source,
+    remoteSha: source,
+    image: 'sociobotregistry.azurecr.io/sf-family-doodle-relay:0123456789ab',
+    liveSha: '76543210fedcba9876543210fedcba9876543210',
+  }), [
+    `image tag must be the full requested source ${source}`,
+    `live health must report requested source ${source}`,
   ]);
 });

@@ -7,6 +7,7 @@ set -euo pipefail
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source_sha="$(git -C "$repo_dir" rev-parse HEAD)"
+requested_sha="${1:-${EXPECTED_SOURCE_SHA:-$source_sha}}"
 subscription="${AZURE_SUBSCRIPTION_ID:-283af945-693b-4a6e-b952-df928d0a18a9}"
 resource_group="sociobot"
 environment="factory-env"
@@ -17,6 +18,15 @@ share_name="sf-family-doodle-relay-data"
 storage_name="family-doodle-relay-data"
 app_url="https://management.azure.com/subscriptions/${subscription}/resourceGroups/${resource_group}/providers/Microsoft.App/containerApps/${app_name}?api-version=2024-03-01"
 
+if [ -n "$(git -C "$repo_dir" status --porcelain --untracked-files=normal)" ]; then
+  echo "Refusing to deploy a dirty worktree. Commit every release file first." >&2
+  exit 1
+fi
+
+remote_sha="$(git -C "$repo_dir" ls-remote --exit-code origin refs/heads/main | awk 'NR == 1 { print $1 }')"
+node "$repo_dir/scripts/deployment-contract.mjs" --source-identity \
+  --requested-sha "$requested_sha" --checkout-sha "$source_sha" --remote-sha "$remote_sha"
+
 if ! az storage share-rm show --resource-group "$resource_group" --storage-account "$storage_account" --name "$share_name" --only-show-errors -o none; then
   az storage share-rm create --resource-group "$resource_group" --storage-account "$storage_account" --name "$share_name" --quota 1 --only-show-errors -o none
 fi
@@ -25,7 +35,7 @@ storage_key="$(az storage account keys list --resource-group "$resource_group" -
 az containerapp env storage set --resource-group "$resource_group" --name "$environment" --storage-name "$storage_name" --access-mode ReadWrite --azure-file-account-name "$storage_account" --azure-file-share-name "$share_name" --azure-file-account-key "$storage_key" --only-show-errors -o none
 
 echo "== build $source_sha with the durable runtime configuration"
-image_tag="${app_name}:${source_sha:0:12}"
+image_tag="${app_name}:${source_sha}"
 az acr build --registry "$registry" --image "$image_tag" --file Dockerfile \
   --build-arg "BUILD_SHA=$source_sha" --build-arg "GIT_SHA=$source_sha" --build-arg "SOURCE_COMMIT=$source_sha" \
   "$repo_dir"
@@ -85,5 +95,9 @@ for _ in $(seq 1 30); do
   sleep 10
 done
 [ "$identity_ready" = true ] || { echo "Live health did not report $source_sha." >&2; exit 1; }
+
+node "$repo_dir/scripts/deployment-contract.mjs" --source-identity \
+  --requested-sha "$requested_sha" --checkout-sha "$source_sha" --remote-sha "$remote_sha" \
+  --image "$image" --live-sha "$live_sha"
 
 az containerapp show --resource-group "$resource_group" --name "$app_name" --query '{revision:properties.latestReadyRevisionName,image:properties.template.containers[0].image,scale:properties.template.scale,volumes:properties.template.volumes,mounts:properties.template.containers[0].volumeMounts}' -o json

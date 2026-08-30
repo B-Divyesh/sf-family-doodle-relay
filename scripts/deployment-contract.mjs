@@ -2,6 +2,8 @@
 
 import process from 'node:process';
 
+const FULL_GIT_SHA = /^[0-9a-f]{40}$/;
+
 export function durableDeploymentPatch(image) {
   if (!image) throw new Error('an image is required for the durable deployment patch');
   return {
@@ -119,11 +121,60 @@ export function assertRevisionOwnership(revisions, expectedRevision) {
   return { revision: expectedRevision, activeRevisions: 1, replicas: 1, trafficWeight: 100 };
 }
 
+export function sourceIdentityErrors({ requestedSha = '', checkoutSha = '', remoteSha = '', image = '', liveSha = '' }) {
+  const errors = [];
+  if (!FULL_GIT_SHA.test(requestedSha)) {
+    errors.push('requested source must be a full lowercase Git commit SHA');
+  }
+  if (checkoutSha !== requestedSha) {
+    errors.push(`checkout must match requested source ${requestedSha}`);
+  }
+  if (remoteSha !== requestedSha) {
+    errors.push(`origin/main must advertise requested source ${requestedSha}`);
+  }
+  if (image && image.split(':').pop() !== requestedSha) {
+    errors.push(`image tag must be the full requested source ${requestedSha}`);
+  }
+  if (liveSha && liveSha !== requestedSha) {
+    errors.push(`live health must report requested source ${requestedSha}`);
+  }
+  return errors;
+}
+
+export function assertSourceIdentity(identity) {
+  const errors = sourceIdentityErrors(identity);
+  if (errors.length) {
+    throw new Error(`source identity failed: ${errors.join('; ')}`);
+  }
+  return {
+    source: identity.requestedSha,
+    remote: identity.remoteSha,
+    ...(identity.image ? { image: identity.image } : {}),
+    ...(identity.liveSha ? { live: identity.liveSha } : {}),
+  };
+}
+
+function argument(name) {
+  const index = process.argv.indexOf(name);
+  return index >= 0 ? process.argv[index + 1] ?? '' : '';
+}
+
 async function main() {
   if (process.argv.includes('--template')) {
     const imageIndex = process.argv.indexOf('--image');
     const image = imageIndex >= 0 ? process.argv[imageIndex + 1] : '';
     process.stdout.write(`${JSON.stringify(durableDeploymentPatch(image))}\n`);
+    return;
+  }
+  if (process.argv.includes('--source-identity')) {
+    const summary = assertSourceIdentity({
+      requestedSha: argument('--requested-sha'),
+      checkoutSha: argument('--checkout-sha'),
+      remoteSha: argument('--remote-sha'),
+      image: argument('--image'),
+      liveSha: argument('--live-sha'),
+    });
+    process.stdout.write(`${JSON.stringify(summary)}\n`);
     return;
   }
   const expectedImageIndex = process.argv.indexOf('--expected-image');
