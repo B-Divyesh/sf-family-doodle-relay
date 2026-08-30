@@ -60,8 +60,16 @@ Azure made revision `sf-family-doodle-relay--0000042` the sole active healthy
 owner with one physical replica and 100% traffic. Its full-SHA image tag,
 single-replica scale, `/data` mount, named Azure Files volume, and every mount
 option passed the repository validators. Live `/health` returned the complete
-source SHA. The final repository HEAD containing this handoff is pushed and
-redeployed through the same full-SHA checked path before completion.
+source SHA.
+
+The evidence/handoff commit `2e624709d1bc0318d4dabec4c05fa78ff605ec45`
+was then pushed and deployed by ACR build `ch1ds` in 4m17s. Image digest
+`sha256:1252ff073521288e469f5d5a2f2a935003e14a8eb035eda2d4a8704bcc04e555`
+became revision `sf-family-doodle-relay--0000043` with the same one-owner
+topology. A room created on revision `0000042` returned 200 with intact state
+after `0000043` took ownership, proving the durable revision handoff. The final
+repository HEAD containing this note is pushed and redeployed through the same
+full-SHA checked path before completion.
 
 ## Verification evidence
 
@@ -129,11 +137,10 @@ Evidence is in [`.factory/repair-10-evidence/`](repair-10-evidence/).
 - Live mobile Lighthouse: 100/100/100/100; FCP 1.12 s, LCP 1.42 s, TBT 0,
   CLS 0, transfer 103,883 B, with no run warnings.
 
-## Known external condition
+## External dependency and known gaps
 
-At 02:52 UTC on 30 August 2026, both the Sociobot license verifier and hosted
-checkout returned HTTP 503 from `api.sociobot.in`. That service is outside this
-repository and the product contract forbids changing its infrastructure here.
-The relay's tested fallback keeps free four-turn play available when license
-verification is unavailable. Retry the external verifier and checkout during
-release review; no product request or private room data depends on them.
+At 02:52 UTC on 30 August 2026, the Sociobot license verifier and hosted
+checkout briefly returned HTTP 503. The relay's tested fallback kept free
+four-turn play available. At 03:00 UTC, final checks returned 200 from license
+verification and the expected 303 checkout redirect. No known release gap
+remains.
