@@ -1,1 +1,1 @@
-Draw and guess with one trusted person in a private two-person room.
+Draw, guess, and build a private relay with one trusted person.

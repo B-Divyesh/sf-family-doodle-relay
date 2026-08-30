@@ -1,0 +1,14 @@
+{
+  "url": "http://127.0.0.1:18080/privacy",
+  "loadMs": 563,
+  "errors": [],
+  "a11y": {
+    "title": "Privacy — Family Doodle Relay",
+    "lang": "en",
+    "h1": 1,
+    "main": true,
+    "imgsMissingAlt": 0,
+    "buttonsUnlabeled": 0,
+    "textLength": 1057
+  }
+}
