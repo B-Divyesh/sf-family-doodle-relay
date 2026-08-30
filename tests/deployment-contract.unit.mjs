@@ -191,6 +191,73 @@ test('regression V10-01: rejects the exact activation-failed revision that owned
   ]);
 });
 
+test('regression V11-01: rejects candidate f2333f8 falling back to the old mounted build', () => {
+  // Independent verification 11 observed the candidate image in revision
+  // 0000038 with the generic three-replica template and no /data mount. Azure
+  // assigned it all configured traffic even though activation failed, while
+  // healthy revision 0000037 continued answering /health with the old build.
+  const verifierV11App = appWith({
+    containers: [{
+      name: 'app',
+      image: 'sociobotregistry.azurecr.io/sf-family-doodle-relay:f2333f8187d8',
+      env: [{ name: 'PORT', value: '8080' }],
+      volumeMounts: null,
+    }],
+    scale: {
+      cooldownPeriod: 300,
+      minReplicas: 1,
+      maxReplicas: 3,
+      pollingInterval: 30,
+      rules: null,
+    },
+    volumes: null,
+  }, 'sf-family-doodle-relay--0000038');
+  verifierV11App.properties.latestReadyRevisionName = 'sf-family-doodle-relay--0000037';
+
+  assert.deepEqual(
+    deploymentContractErrors(
+      verifierV11App,
+      'sociobotregistry.azurecr.io/sf-family-doodle-relay:f2333f8187d8',
+    ),
+    [
+      'maximum replicas must be 1',
+      'relay-data must be mounted at /data',
+      'relay-data must use the family-doodle-relay-data Azure Files storage',
+      'relay-data mount options must include uid=10001',
+      'relay-data mount options must include gid=10001',
+      'relay-data mount options must include file_mode=0770',
+      'relay-data mount options must include dir_mode=0770',
+      'latest revision is not ready',
+    ],
+  );
+  assert.deepEqual(revisionOwnershipErrors([
+    {
+      name: 'sf-family-doodle-relay--0000037',
+      properties: {
+        active: true,
+        healthState: 'Healthy',
+        runningState: 'RunningAtMaxScale',
+        replicas: 1,
+        trafficWeight: 0,
+      },
+    },
+    {
+      name: 'sf-family-doodle-relay--0000038',
+      properties: {
+        active: true,
+        healthState: 'Unhealthy',
+        runningState: 'ActivationFailed',
+        replicas: 1,
+        trafficWeight: 100,
+      },
+    },
+  ], 'sf-family-doodle-relay--0000038'), [
+    'exactly one revision must be active, found 2',
+    'active owner must be healthy',
+    'active owner must be running',
+  ]);
+});
+
 test('@claim:deployment-topology accepts only one ready app instance using the durable relay volume and current image', () => {
   const configuredDeployment = appWith({
     containers: [{
