@@ -1,0 +1,21 @@
+{
+  "recorded_at": "2026-08-30T05:39:00Z",
+  "source": "Public Sociobot checkout redirect and its hosted Dodo checkout session payload",
+  "entry_url": "https://api.sociobot.in/api/v1/products/family-doodle-relay/checkout",
+  "entry_status": 303,
+  "redirect_origin": "https://checkout.dodopayments.com",
+  "redirect_path_pattern": "/session/cks_*",
+  "product": {
+    "slug": "family-doodle-relay",
+    "name": "Family Doodle Relay Family Edition",
+    "description": "One-time Family Edition unlock for Family Doodle Relay. Adds eight-turn rooms; four-turn play and PNG downloads remain free.",
+    "price_minor": 600,
+    "currency": "USD",
+    "price_type": "one_time_price",
+    "is_recurring": false
+  },
+  "merchant": {
+    "name": "Dodo Payments",
+    "checkout_notice": "This order process is conducted by our online reseller & Merchant of Record, dodopayments.com, who also handles order-related inquiries and returns."
+  }
+}

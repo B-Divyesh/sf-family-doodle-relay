@@ -1,6 +1,28 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { PNG } from 'pngjs';
+import { readFile } from 'node:fs/promises';
+
+type CheckoutContract = {
+  entry_url: string;
+  entry_status: number;
+  redirect_origin: string;
+  redirect_path_pattern: string;
+  product: {
+    slug: string;
+    name: string;
+    description: string;
+    price_minor: number;
+    currency: string;
+    price_type: string;
+    is_recurring: boolean;
+  };
+  merchant: { name: string; checkout_notice: string };
+};
+
+async function recordedCheckoutContract(): Promise<CheckoutContract> {
+  return JSON.parse(await readFile(new URL('./fixtures/sociobot-checkout-contract.json', import.meta.url), 'utf8'));
+}
 
 test('real routes expose complete metadata and meet the page baseline', async ({ page }) => {
   const routes = [
@@ -277,12 +299,24 @@ test('@claim:room-expiry new rooms expire within four hours', async ({ request }
   expect(room.expires_at).toBeLessThanOrEqual(before + 14_401);
 });
 
-test('@claim:one-time-price page states the one-time price and uses Sociobot checkout', async ({ page }) => {
+test('@claim:one-time-price recorded checkout is a one-time USD 6 purchase reached through Sociobot', async ({ page }) => {
+  const contract = await recordedCheckoutContract();
+  expect(contract.product).toMatchObject({
+    slug: 'family-doodle-relay',
+    price_minor: 600,
+    currency: 'USD',
+    price_type: 'one_time_price',
+    is_recurring: false,
+  });
+  expect(contract.entry_status).toBe(303);
+  expect(contract.redirect_origin).toBe('https://checkout.dodopayments.com');
+  expect(contract.redirect_path_pattern).toBe('/session/cks_*');
+  expect(contract.product.description).toContain('One-time');
   await page.goto('/');
   await expect(page.getByText('$6 once', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('$6 once, no subscription')).toBeVisible();
   const buy = page.getByRole('link', { name: 'Buy the family edition' });
-  await expect(buy).toHaveAttribute('href', 'https://api.sociobot.in/api/v1/products/family-doodle-relay/checkout');
+  await expect(buy).toHaveAttribute('href', contract.entry_url);
   await expect(page.getByText('One-time purchase. Payment opens on Sociobot.')).toBeVisible();
 });
 
@@ -321,14 +355,52 @@ test('regression V9-02: a family-edition verifier outage starts a free room and 
   ])).toEqual([null, null]);
 });
 
-test('regression V9-03 and V9-04: purchase terms name the merchant and refunds, and privacy names license verification', async ({ page }) => {
+test('@claim:purchase-provider recorded checkout names its merchant and return handler', async ({ page }) => {
+  const contract = await recordedCheckoutContract();
   await page.goto('/terms');
-  await expect(page.getByText('Sociobot and Dodo are the merchant of record.')).toBeVisible();
-  await expect(page.getByText('Sociobot/Dodo handles refunds.')).toBeVisible();
+  await expect(page.getByText('Dodo Payments is the merchant of record.')).toBeVisible();
+  await expect(page.getByText('Its checkout handles order questions and returns.')).toBeVisible();
+  expect(contract.merchant.name).toBe('Dodo Payments');
+  expect(contract.merchant.checkout_notice).toContain('Merchant of Record, dodopayments.com');
+  expect(contract.merchant.checkout_notice).toContain('order-related inquiries and returns');
+});
+
+test('@claim:license-check-data-flow restoring a license sends only its token to the documented check', async ({ page }) => {
+  const observed: { url: string; method: string; body: string | null }[] = [];
+  await page.route('https://api.sociobot.in/api/v1/products/family-doodle-relay/verify**', route => {
+    observed.push({ url: route.request().url(), method: route.request().method(), body: route.request().postData() });
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ valid: true, reason: 'ok' }) });
+  });
   await page.goto('/privacy');
-  await expect(page.getByText('Restoring a license sends its token to')).toBeVisible();
-  const recipient = page.getByRole('link', { name: 'api.sociobot.in' });
-  await expect(recipient).toHaveAttribute('href', 'https://api.sociobot.in/api/v1/products/family-doodle-relay/verify');
+  await expect(page.locator('p').filter({ hasText: 'Restoring a license sends one check to' })).toBeVisible();
+  await expect(page.getByText('api.sociobot.in', { exact: true })).toBeVisible();
+  await page.goto('/');
+  await page.getByLabel('Paste your license').fill('fixture-private-license-token');
+  await page.getByRole('button', { name: 'Restore the family edition' }).click();
+  await expect(page.getByText('Family edition is ready on this device.')).toBeVisible();
+  expect(observed).toHaveLength(1);
+  const requestUrl = new URL(observed[0].url);
+  expect(`${requestUrl.origin}${requestUrl.pathname}`).toBe('https://api.sociobot.in/api/v1/products/family-doodle-relay/verify');
+  expect([...requestUrl.searchParams.entries()]).toEqual([['license', 'fixture-private-license-token']]);
+  expect(observed[0]).toMatchObject({ method: 'GET', body: null });
+  expect(observed[0].url).not.toMatch(/room|guess|stroke|name|email/i);
+});
+
+test('@claim:refunded-license a revoked fixture cannot enable eight-turn rooms', async ({ page, request }) => {
+  await page.route('https://api.sociobot.in/api/v1/products/family-doodle-relay/verify**', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ valid: false, reason: 'revoked' }),
+  }));
+  await page.goto('/');
+  await page.getByLabel('Paste your license').fill('fixture-refunded-family-edition-license');
+  await page.getByRole('button', { name: 'Restore the family edition' }).click();
+  await expect(page.getByText('This license is not active.')).toBeVisible();
+  const created = await (await request.post('/api/rooms', { data: { license: 'fixture-refunded-family-edition-license' } })).json();
+  const room = await (await request.get(`/api/rooms/${created.code}?token=${created.token}`)).json();
+  expect(room.total_turns).toBe(4);
+  await page.goto('/terms');
+  await expect(page.getByText('A refunded license cannot enable eight-turn rooms.')).toBeVisible();
 });
 
 test('@claim:live-relay two players complete four synced turns', async ({ browser, request }) => {

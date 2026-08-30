@@ -1,15 +1,16 @@
 {
   "name": "family-doodle-relay",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.3",
   "type": "module",
   "scripts": {
     "dev": "concurrently -k \"vite --host 0.0.0.0\" \"cargo run\"",
     "build": "vite build",
-    "test": "npm run build && npm run typecheck && cargo test && npm run test:deployment && playwright test",
+    "test": "npm run build && npm run typecheck && cargo test && npm run test:claims-manifest && npm run test:deployment && playwright test",
     "typecheck": "tsc -p frontend/tsconfig.json --noEmit",
     "lint": "cargo fmt -- --check && cargo clippy --all-targets -- -D warnings",
     "test:deployment": "node --test tests/deployment-contract.unit.mjs",
+    "test:claims-manifest": "node --test tests/claims-manifest.unit.mjs",
     "test:claims": "playwright test --grep @claim:",
     "preview": "cargo run",
     "test:server": "concurrently -k \"node tests/license-fixture-server.mjs\" \"SOCIOBOT_VERIFY_URL=http://127.0.0.1:9091/api/v1/products/family-doodle-relay/verify cargo run\""

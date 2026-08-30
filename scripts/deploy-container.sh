@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Deploy the relay with its durable, single-owner room store. A new revision is
+# Deploy the relay with its durable, single-instance room store. A new revision is
 # created with the complete /data template at zero traffic. Only after its
 # mount, replica bounds, process health, and physical replica are verified does
-# traffic move from the prior healthy owner. The generic factory container
+# traffic move from the prior healthy revision. The generic factory container
 # template is intentionally unsuitable for this stateful backend.
 set -euo pipefail
 
@@ -42,7 +42,7 @@ az acr build --registry "$registry" --image "$image_tag" --file Dockerfile \
   "$repo_dir"
 image="${registry}.azurecr.io/${image_tag}"
 
-echo "== restore one durable stable owner before staging"
+echo "== restore one durable stable revision before staging"
 stable_revision="$(az containerapp show --resource-group "$resource_group" --name "$app_name" --query properties.latestReadyRevisionName -o tsv)"
 [ -n "$stable_revision" ] || { echo "No ready revision is available for a zero-downtime deployment." >&2; exit 1; }
 stable_json="$(az containerapp revision show --resource-group "$resource_group" --name "$app_name" --revision "$stable_revision" -o json)"
@@ -95,7 +95,7 @@ for _ in $(seq 1 20); do
 done
 [ "$traffic_ready" = true ] || { echo "Traffic did not converge on the healthy durable candidate." >&2; exit 1; }
 
-echo "== deactivate superseded room owners"
+echo "== deactivate superseded app revisions"
 while IFS= read -r old_revision; do
   [ -z "$old_revision" ] && continue
   if ! deactivate_output="$(az containerapp revision deactivate --resource-group "$resource_group" --name "$app_name" --revision "$old_revision" --only-show-errors -o none 2>&1)"; then
@@ -120,7 +120,7 @@ for _ in $(seq 1 30); do
   fi
   sleep 5
 done
-[ "$ownership_ready" = true ] || { echo "Production did not converge to one active room owner." >&2; exit 1; }
+[ "$ownership_ready" = true ] || { echo "Production did not converge to one active app revision." >&2; exit 1; }
 
 echo "== verify live build identity"
 identity_ready=false

@@ -6,7 +6,7 @@ Family Doodle Relay is for a child and one trusted adult playing from different 
 
 There are no public rooms, profiles, ads, or open chat. A room allows two players and closes within four hours. The free game includes four turns and one PNG strip. The $6 family edition is a one-time purchase for eight-turn rooms. Payment opens on Sociobot.
 
-## Try the sandbox
+## Try the demo
 
 Open `/?demo=1` or <https://family-doodle-relay.sociobot.in/?demo=1>. It starts with a sample relay and does not save changes. `/demo` is an equivalent direct route. See [`.factory/demo.md`](.factory/demo.md).
 
@@ -30,7 +30,7 @@ npm run lint
 npm run test:deployment
 ```
 
-The claim tests are listed in [`.factory/claims.json`](.factory/claims.json). `npm test -- --grep @claim:` runs only those browser checks.
+The claim tests are listed in [`.factory/claims.json`](.factory/claims.json). Run `npm run test:claims` for the tagged browser claim checks.
 
 ## Run the production container
 
@@ -49,7 +49,7 @@ This browser keeps private room keys and an optional purchase license in local s
 
 ## Deploy
 
-The factory builds the root `Dockerfile` and supplies `PORT` plus `BUILD_SHA`. Push a clean release commit, then run `./scripts/deploy-container.sh <full-commit-sha>`. The script checks that the checkout and `origin/main` match before it touches Azure. It stages the complete Azure Files `/data` template at zero traffic, requires one healthy replica, and only then moves 100% traffic to it. It retires the previous room owner after the traffic switch and checks the live build ID. DNS, billing product registration, and infrastructure stay outside this repository.
+The factory builds the root `Dockerfile` and supplies `PORT` plus `BUILD_SHA`. Push a clean release commit, then run `./scripts/deploy-container.sh <full-commit-sha>`. The script checks that the checkout and `origin/main` match before it touches Azure. It stages the Azure Files `/data` template without live traffic. It moves traffic after one replica is healthy. It retires the previous app revision, then checks the live build ID. DNS, billing product registration, and infrastructure stay outside this repository.
 
 ## License
 

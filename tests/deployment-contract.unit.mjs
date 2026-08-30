@@ -523,7 +523,7 @@ test('deploy script validates candidate health before assigning candidate traffi
   const readinessGate = script.indexOf('--promotion-ready');
   const candidateSwitch = script.indexOf('--revision-weight "${candidate_revision}=100"');
   const switchedGate = script.indexOf('--traffic-switched');
-  const retirement = script.indexOf('echo "== deactivate superseded room owners"');
+  const retirement = script.indexOf('echo "== deactivate superseded app revisions"');
 
   assert.ok(readinessGate >= 0, 'promotion readiness gate must be invoked');
   assert.ok(candidateSwitch > readinessGate, 'traffic switch must follow candidate health validation');

@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
 
 const fixtureLicense = 'fixture-valid-family-edition-license';
+const refundedLicense = 'fixture-refunded-family-edition-license';
 
 createServer((request, response) => {
   const url = new URL(request.url, 'http://127.0.0.1:9091');
@@ -9,8 +10,12 @@ createServer((request, response) => {
       request.socket.destroy();
       return;
     }
+    const license = url.searchParams.get('license');
     response.writeHead(200, { 'content-type': 'application/json' });
-    response.end(JSON.stringify({ valid: url.searchParams.get('license') === fixtureLicense }));
+    response.end(JSON.stringify({
+      valid: license === fixtureLicense,
+      reason: license === fixtureLicense ? 'ok' : license === refundedLicense ? 'revoked' : 'invalid',
+    }));
     return;
   }
   response.writeHead(404).end();

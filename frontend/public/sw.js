@@ -1,4 +1,4 @@
-const CACHE = 'relay-shell-v3';
+const CACHE = 'relay-shell-v4';
 const DOCUMENTS = ['/', '/?demo=1', '/demo'];
 const STATIC = ['/relay-hero-mobile.avif', '/favicon.svg'];
 

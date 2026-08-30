@@ -1,6 +1,6 @@
 # Landing page copy audit
 
-Audited 29 August 2026. Counts use whitespace-separated words. The table includes headings, controls, labels, and visible sentences.
+Audited 30 August 2026. Counts use whitespace-separated words. The table includes headings, controls, labels, and visible sentences.
 
 | Copy | Words | Result |
 |---|---:|---|
@@ -9,7 +9,7 @@ Audited 29 August 2026. Counts use whitespace-separated words. The table include
 | How it works | 3 | Pass |
 | Privacy | 1 | Pass |
 | Draw together from two places | 5 | Pass |
-| For a child and trusted adult who want a calm game between calls. | 12 | Pass |
+| For a child and one trusted adult who want a calm game between calls. | 13 | Pass |
 | Try it with sample data | 5 | Pass |
 | Make a private room | 4 | Pass |
 | A sample relay opens next. | 5 | Pass |
@@ -59,9 +59,25 @@ Audited 29 August 2026. Counts use whitespace-separated words. The table include
 | Draw and guess with one trusted person. | 7 | Pass |
 | Terms | 1 | Pass |
 | Built by Param Factory | 4 | Pass |
+| v1.0.3 | 1 | Pass |
 | Art generated for this product | 5 | Pass |
 
 No sentence exceeds 22 words. No banned word appears. Read aloud, the first screen identifies the two-person drawing job and its sample-data first step in one breath.
+
+## Changed privacy and terms copy
+
+| Copy | Words | Result |
+|---|---:|---|
+| The server stores the room code, access-key hashes, turn and timer state, drawing panels, and guesses in SQLite. | 18 | Pass; `room-storage-fields` |
+| It also stores creation, expiry, and brief presence times. | 9 | Pass; `room-storage-fields` |
+| It removes the room within four hours. | 7 | Pass; `room-expiry` |
+| Restoring a license sends one check to api.sociobot.in. | 8 | Pass; `license-check-data-flow` |
+| The request includes the license token and no room data. | 10 | Pass; `license-check-data-flow` |
+| Dodo Payments is the merchant of record. | 7 | Pass; `purchase-provider` |
+| Its checkout handles order questions and returns. | 7 | Pass; `purchase-provider` |
+| A refunded license cannot enable eight-turn rooms. | 7 | Pass; `refunded-license` |
+
+The legal copy names the stored fields and tested payment behavior without the earlier unproved joint-merchant or generic refund statements.
 
 ## Terminology
 

@@ -13,6 +13,7 @@ use axum::{
 use futures_util::{SinkExt, StreamExt};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use sqlx::{sqlite::SqlitePoolOptions, Row, SqlitePool};
 use std::{
     collections::HashMap,
@@ -57,8 +58,8 @@ struct LimitWindow {
 #[derive(Clone)]
 struct Room {
     code: String,
-    host_token: String,
-    guest_token: Option<String>,
+    host_token_hash: String,
+    guest_token_hash: Option<String>,
     phase: usize,
     total_turns: usize,
     deadline: Option<u64>,
@@ -295,6 +296,28 @@ async fn initialize_database(db: &SqlitePool) {
         .await
         .expect("configure SQLite");
     sqlx::query("CREATE TABLE IF NOT EXISTS rooms (code TEXT PRIMARY KEY NOT NULL, host_token TEXT NOT NULL, guest_token TEXT, phase INTEGER NOT NULL, total_turns INTEGER NOT NULL, deadline INTEGER, strokes TEXT NOT NULL, snapshots TEXT NOT NULL, guesses TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, host_seen INTEGER NOT NULL DEFAULT 0, guest_seen INTEGER NOT NULL DEFAULT 0)").execute(db).await.expect("create rooms table");
+    // Older rooms stored short-lived access keys directly. Convert them in
+    // place so a deployed database never retains reusable credentials.
+    let rows = sqlx::query("SELECT code, host_token, guest_token FROM rooms")
+        .fetch_all(db)
+        .await
+        .expect("read room access keys");
+    for row in rows {
+        let code: String = row.get("code");
+        let host: String = row.get("host_token");
+        let guest: Option<String> = row.get("guest_token");
+        let host_hash = stored_token_hash(&host);
+        let guest_hash = guest.as_deref().map(stored_token_hash);
+        if host_hash != host || guest_hash != guest {
+            sqlx::query("UPDATE rooms SET host_token = ?, guest_token = ? WHERE code = ?")
+                .bind(host_hash)
+                .bind(guest_hash)
+                .bind(code)
+                .execute(db)
+                .await
+                .expect("hash existing room access keys");
+        }
+    }
 }
 async fn shutdown_signal() {
     let ctrl_c = async { tokio::signal::ctrl_c().await.expect("ctrl-c handler") };
@@ -433,8 +456,8 @@ async fn create_room(State(state): State<AppState>, Json(input): Json<CreateRoom
     let host_token = Uuid::new_v4().to_string();
     let room = Room {
         code: code.clone(),
-        host_token: host_token.clone(),
-        guest_token: None,
+        host_token_hash: token_hash(&host_token),
+        guest_token_hash: None,
         phase: 0,
         total_turns: turns_for(premium),
         deadline: None,
@@ -498,14 +521,14 @@ async fn join_room(State(state): State<AppState>, Json(input): Json<JoinRoom>) -
             "Room not found. Check the code and ask the host to keep the room open.",
         );
     };
-    if room.guest_token.is_some() {
+    if room.guest_token_hash.is_some() {
         return error(
             StatusCode::CONFLICT,
             "This room already has two players. Ask the host to make a new room.",
         );
     }
     let token = Uuid::new_v4().to_string();
-    room.guest_token = Some(token.clone());
+    room.guest_token_hash = Some(token_hash(&token));
     room.deadline = Some(now_secs() + TURN_SECONDS);
     if save_room(&state.db, &room).await.is_err() {
         return error(
@@ -662,8 +685,8 @@ async fn fetch_active_room(db: &SqlitePool, code: &str) -> Option<Room> {
 fn room_from_row(row: sqlx::sqlite::SqliteRow) -> Room {
     Room {
         code: row.get("code"),
-        host_token: row.get("host_token"),
-        guest_token: row.get("guest_token"),
+        host_token_hash: row.get("host_token"),
+        guest_token_hash: row.get("guest_token"),
         phase: row.get::<i64, _>("phase") as usize,
         total_turns: row.get::<i64, _>("total_turns") as usize,
         deadline: row.get::<Option<i64>, _>("deadline").map(|v| v as u64),
@@ -677,7 +700,7 @@ fn room_from_row(row: sqlx::sqlite::SqliteRow) -> Room {
     }
 }
 async fn save_room(db: &SqlitePool, room: &Room) -> Result<(), sqlx::Error> {
-    sqlx::query("INSERT INTO rooms (code,host_token,guest_token,phase,total_turns,deadline,strokes,snapshots,guesses,created_at,expires_at,host_seen,guest_seen) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(code) DO UPDATE SET host_token=excluded.host_token,guest_token=excluded.guest_token,phase=excluded.phase,total_turns=excluded.total_turns,deadline=excluded.deadline,strokes=excluded.strokes,snapshots=excluded.snapshots,guesses=excluded.guesses,created_at=excluded.created_at,expires_at=excluded.expires_at,host_seen=excluded.host_seen,guest_seen=excluded.guest_seen").bind(&room.code).bind(&room.host_token).bind(&room.guest_token).bind(room.phase as i64).bind(room.total_turns as i64).bind(room.deadline.map(|v| v as i64)).bind(serde_json::to_string(&room.strokes).unwrap()).bind(serde_json::to_string(&room.snapshots).unwrap()).bind(serde_json::to_string(&room.guesses).unwrap()).bind(room.created_at as i64).bind(room.expires_at as i64).bind(room.host_seen as i64).bind(room.guest_seen as i64).execute(db).await.map(|_| ())
+    sqlx::query("INSERT INTO rooms (code,host_token,guest_token,phase,total_turns,deadline,strokes,snapshots,guesses,created_at,expires_at,host_seen,guest_seen) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(code) DO UPDATE SET host_token=excluded.host_token,guest_token=excluded.guest_token,phase=excluded.phase,total_turns=excluded.total_turns,deadline=excluded.deadline,strokes=excluded.strokes,snapshots=excluded.snapshots,guesses=excluded.guesses,created_at=excluded.created_at,expires_at=excluded.expires_at,host_seen=excluded.host_seen,guest_seen=excluded.guest_seen").bind(&room.code).bind(&room.host_token_hash).bind(&room.guest_token_hash).bind(room.phase as i64).bind(room.total_turns as i64).bind(room.deadline.map(|v| v as i64)).bind(serde_json::to_string(&room.strokes).unwrap()).bind(serde_json::to_string(&room.snapshots).unwrap()).bind(serde_json::to_string(&room.guesses).unwrap()).bind(room.created_at as i64).bind(room.expires_at as i64).bind(room.host_seen as i64).bind(room.guest_seen as i64).execute(db).await.map(|_| ())
 }
 async fn set_presence(state: &AppState, code: &str, role: &str) {
     let _write = state.writes.lock().await;
@@ -752,10 +775,21 @@ fn turns_for(verified_license: bool) -> usize {
         4
     }
 }
+fn token_hash(token: &str) -> String {
+    format!("sha256:{:x}", Sha256::digest(token.as_bytes()))
+}
+fn stored_token_hash(token: &str) -> String {
+    if token.starts_with("sha256:") {
+        token.to_owned()
+    } else {
+        token_hash(token)
+    }
+}
 fn role_for<'a>(room: &'a Room, token: &str) -> Option<&'a str> {
-    if token == room.host_token {
+    let digest = token_hash(token);
+    if digest == room.host_token_hash {
         Some("host")
-    } else if room.guest_token.as_deref() == Some(token) {
+    } else if room.guest_token_hash.as_deref() == Some(digest.as_str()) {
         Some("guest")
     } else {
         None
@@ -811,8 +845,8 @@ mod tests {
         let now = now_secs();
         let room = Room {
             code: "EXPIRED".into(),
-            host_token: "host".into(),
-            guest_token: None,
+            host_token_hash: token_hash("host"),
+            guest_token_hash: None,
             phase: 0,
             total_turns: 4,
             deadline: None,
@@ -853,8 +887,8 @@ mod tests {
         let now = now_secs();
         let room = Room {
             code: "SHAREDROOM12".into(),
-            host_token: "host-token".into(),
-            guest_token: None,
+            host_token_hash: token_hash("host-token"),
+            guest_token_hash: None,
             phase: 0,
             total_turns: 4,
             deadline: None,
@@ -869,8 +903,8 @@ mod tests {
         save_room(&first, &room).await.unwrap();
 
         let fetched = fetch_active_room(&second, "SHAREDROOM12").await.unwrap();
-        assert_eq!(fetched.host_token, "host-token");
-        assert!(fetched.guest_token.is_none());
+        assert_eq!(fetched.host_token_hash, token_hash("host-token"));
+        assert!(fetched.guest_token_hash.is_none());
 
         let second_state = AppState {
             db: second.clone(),
@@ -889,7 +923,7 @@ mod tests {
         assert_eq!(joined.status(), StatusCode::OK);
 
         let reconnected = fetch_active_room(&first, "SHAREDROOM12").await.unwrap();
-        assert!(reconnected.guest_token.is_some());
+        assert!(reconnected.guest_token_hash.is_some());
         first.close().await;
         second.close().await;
         let _ = std::fs::remove_file(path);
@@ -914,8 +948,8 @@ mod tests {
             &first,
             &Room {
                 code: "HANDOFFROOM1".into(),
-                host_token: "host-token".into(),
-                guest_token: Some("guest-token".into()),
+                host_token_hash: token_hash("host-token"),
+                guest_token_hash: Some(token_hash("guest-token")),
                 phase: 1,
                 total_turns: 4,
                 deadline: Some(now + TURN_SECONDS),
@@ -946,7 +980,7 @@ mod tests {
             .await
             .unwrap();
         let room = fetch_active_room(&restored, "HANDOFFROOM1").await.unwrap();
-        assert_eq!(room.guest_token.as_deref(), Some("guest-token"));
+        assert_eq!(room.guest_token_hash, Some(token_hash("guest-token")));
         assert_eq!(room.guesses, vec!["A house at sea"]);
         restored.close().await;
         let _ = fs::remove_dir_all(directory);
@@ -962,5 +996,108 @@ mod tests {
             "91 83 0:74 / /data rw,relatime - cifs //relay.file.core.windows.net/share rw"
         );
         assert!(has_data_mount(durable_volume));
+    }
+
+    // @claim:room-storage-fields
+    #[tokio::test]
+    async fn claim_room_storage_fields() {
+        let db = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        initialize_database(&db).await;
+
+        let columns: Vec<String> = sqlx::query("PRAGMA table_info(rooms)")
+            .fetch_all(&db)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|row| row.get("name"))
+            .collect();
+        assert_eq!(
+            columns,
+            [
+                "code",
+                "host_token",
+                "guest_token",
+                "phase",
+                "total_turns",
+                "deadline",
+                "strokes",
+                "snapshots",
+                "guesses",
+                "created_at",
+                "expires_at",
+                "host_seen",
+                "guest_seen",
+            ]
+        );
+
+        let now = now_secs();
+        let room = Room {
+            code: "FIELDTEST123".into(),
+            host_token_hash: token_hash("reusable-host-key"),
+            guest_token_hash: Some(token_hash("reusable-guest-key")),
+            phase: 2,
+            total_turns: 4,
+            deadline: Some(now + TURN_SECONDS),
+            strokes: vec![],
+            snapshots: vec![],
+            guesses: vec!["A house at sea".into()],
+            created_at: now,
+            expires_at: now + ROOM_TTL,
+            host_seen: now,
+            guest_seen: now,
+        };
+        save_room(&db, &room).await.unwrap();
+        let row = sqlx::query("SELECT host_token, guest_token FROM rooms WHERE code = ?")
+            .bind(&room.code)
+            .fetch_one(&db)
+            .await
+            .unwrap();
+        let host: String = row.get("host_token");
+        let guest: String = row.get("guest_token");
+        assert_eq!(host, token_hash("reusable-host-key"));
+        assert_eq!(guest, token_hash("reusable-guest-key"));
+        assert!(!host.contains("reusable-host-key"));
+        assert!(!guest.contains("reusable-guest-key"));
+        assert_eq!(role_for(&room, "reusable-host-key"), Some("host"));
+        assert_eq!(role_for(&room, "reusable-guest-key"), Some("guest"));
+    }
+
+    #[tokio::test]
+    async fn existing_plaintext_access_keys_are_migrated_without_breaking_clients() {
+        let db = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        initialize_database(&db).await;
+        let now = now_secs();
+        sqlx::query("INSERT INTO rooms (code,host_token,guest_token,phase,total_turns,deadline,strokes,snapshots,guesses,created_at,expires_at,host_seen,guest_seen) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
+            .bind("MIGRATEKEYS1")
+            .bind("old-host-key")
+            .bind("old-guest-key")
+            .bind(0_i64)
+            .bind(4_i64)
+            .bind(Option::<i64>::None)
+            .bind("[]")
+            .bind("[]")
+            .bind("[]")
+            .bind(now as i64)
+            .bind((now + ROOM_TTL) as i64)
+            .bind(0_i64)
+            .bind(0_i64)
+            .execute(&db)
+            .await
+            .unwrap();
+
+        initialize_database(&db).await;
+        let room = fetch_active_room(&db, "MIGRATEKEYS1").await.unwrap();
+        assert_eq!(room.host_token_hash, token_hash("old-host-key"));
+        assert_eq!(room.guest_token_hash, Some(token_hash("old-guest-key")));
+        assert_eq!(role_for(&room, "old-host-key"), Some("host"));
+        assert_eq!(role_for(&room, "old-guest-key"), Some("guest"));
     }
 }
