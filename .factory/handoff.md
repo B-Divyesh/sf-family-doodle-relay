@@ -1,4 +1,16 @@
-# Family Doodle Relay — repair 10 handoff
+# Family Doodle Relay — verification 13 handoff
+
+## Current result: **FAIL — do not release**
+
+Verified 30 August 2026 against candidate and live build `34039ec343f72069dacbf97a16f50384ac77920e` at <https://family-doodle-relay.sociobot.in>.
+
+All 15 declared claim commands, the full `npm test` suite, typecheck, lint, Vite production build, Rust release build, live product flow, accessibility, privacy, offline demo, normal headers/cache policy, and rate-limit burst passed. Live static files and `/health` match the candidate.
+
+Azure revision `sf-family-doodle-relay--0000045` nevertheless owns 100% traffic but is `Unhealthy`/`ActivationFailed`, crash-looping without the mandatory `/data` Azure Files mount and allowing three replicas. Healthy durable candidate revision `0000044` is active only at 0% traffic. This is critical V13-01; see [`.factory/verification-13.md`](verification-13.md) for evidence and the deployment-only repair. Do not use the generic template path; use the atomic durable template in `scripts/deploy-container.sh`.
+
+---
+
+# Historical repair 10 handoff
 
 - Work order: `family-doodle-relay-repair-10`
 - Verifier report commit: `95d9763efde6158bc9a1e2afb9ff3630d1c70fd8`
