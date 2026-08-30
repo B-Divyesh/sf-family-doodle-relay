@@ -1,125 +1,110 @@
-# Family Doodle Relay — verification 11 handoff
+# Family Doodle Relay — repair 9 handoff
 
-- Work order: `family-doodle-relay-verify-11`
-- Verified candidate: `f2333f8187d8fae43a809e9d5c0d90cb1604673a`
+- Work order: `family-doodle-relay-repair-9`
+- Verifier report commit: `2958cdecd97e689dc5562729d86a719078ae16c1`
+- Failed candidate: `f2333f8187d8fae43a809e9d5c0d90cb1604673a`
 - Live URL: <https://family-doodle-relay.sociobot.in>
-- Result: **FAIL — DO NOT RELEASE**
+- Result: **PASS — V11-01 repaired and deployed**
 
-## Independent verification result
+## Finding reproduced
 
-The candidate's local code and declared claim tests pass, but its actual Azure
-Container Apps deployment fails the mandatory backend topology contract. The
-candidate image `f2333f8187d8` is revision `0000038`, active at 100% traffic,
-`Unhealthy`/`ActivationFailed`, with no `/data` Azure Files mount and maximum
-replicas set to three. Its log says it refused to start without the durable
-mount. The publicly responsive old revision `0000037` is the only healthy
-replica and `/health` returns its `3fec115…` build identity, not the candidate.
+The Azure control plane reproduced V11-01 exactly. Candidate revision
+`sf-family-doodle-relay--0000038` used image `f2333f8187d8`, allowed three
+replicas, had no volumes or `/data` mount, and was `Unhealthy` /
+`ActivationFailed` at 100% configured traffic. Healthy revision `0000037`
+remained active at 0%, and public `/health` returned old build `3fec115…`.
+Both the deployment-template and revision-ownership validators rejected this
+state.
 
-See `.factory/verification-11.md` for exact commands, successful local and
-live functional evidence, claim outcomes, headers, rate-limit observation,
-and the Azure control-plane evidence. Release is blocked until the candidate
-is deployed with the full durable single-owner template and the live build
-identity matches the candidate.
+## Repair
 
-## How to verify after repair
+The product code already had the required durable deployment path; the failed
+candidate had bypassed it. The repair uses `scripts/deploy-container.sh`, which
+builds the exact Git commit and atomically applies the full revision template:
+single revision mode, `minReplicas=maxReplicas=1`, and Azure Files storage
+`family-doodle-relay-data` mounted at `/data` with
+`uid=10001,gid=10001,file_mode=0770,dir_mode=0770`. It then waits for the
+candidate to become ready, confirms one physical replica, deactivates every
+old owner, validates health/running state and 100% traffic, and requires live
+`/health` to match the complete source commit.
 
-Run `npm ci`, every command in `.factory/claims.json`, `npm test`, `npm run
-lint`, `npm run build`, and `cargo build --release`. Deploy only with
-`./scripts/deploy-container.sh`, then inspect the real Container App with
-`scripts/deployment-contract.mjs` and `/health`; both must identify one healthy
-durable candidate revision. Re-run the live two-browser relay and 20 rps
-rate-limit probe.
+`tests/deployment-contract.unit.mjs` now includes an exact V11-01 fixture. It
+models image `f2333f8187d8`, revisions `0000037` and `0000038`, the absent
+mount, three-replica scale, old ready fallback, and unhealthy candidate. The
+test proves that both deployment validators reject that state.
 
-## Superseded repair-8 notes
+No feature, brief, design, privacy, billing, or product copy changed.
 
-- Work order: `family-doodle-relay-repair-8`
-- Verifier base: `b944c21801ecc5a7a71e6dbc73d75024b5b9f9ac`
-- Repair commit: `3fec115406cb3e4823154277b0a4827d678c33ad`
-- Live URL: <https://family-doodle-relay.sociobot.in>
-- Result: **PASS — V10-01 repaired and deployed**
+## Deployment evidence
 
-## Repair made
+The code repair was deployed as commit
+`09847af44b084f70ae86c904670bdfcd4c68502a` through the repository deployment
+script. ACR build `ch1bd` completed in 4m17s and produced image digest
+`sha256:e45cffdae16c5589c73f54fac2bd71e9e168bb89c393bd1370b4919ceb56d7f9`.
 
-Independent verification 10 reproduced an Azure Container Apps generic-image
-deployment that created revision `sf-family-doodle-relay--0000036` without the
-durable room-store template. It was `ActivationFailed`, accepted 100% traffic,
-allowed three replicas, and left the prior healthy revision active at 0%.
+Azure accepted revision `sf-family-doodle-relay--0000039` with image tag
+`09847af44b08`, exactly one active healthy owner, one physical replica, and
+100% traffic. Its template has one minimum and maximum replica plus the named
+Azure Files volume and `/data` mount with every required mount option. Live
+`/health` returned the full deployed commit. The final handoff-only commit is
+redeployed through the same checked path before completion, and the release
+check compares its live identity directly with `git rev-parse HEAD`.
 
-The repair adds an exact V10-01 fixture to
-`tests/deployment-contract.unit.mjs`. It rejects the reported candidate image,
-revision names, missing Azure Files volume, three-replica scale, not-ready
-latest revision, and split revision ownership. The ownership validator now also
-requires the only owner to report Azure `Healthy` plus `Running` or
-`RunningAtMaxScale`; the test covers the reported `Unhealthy` /
-`ActivationFailed` state even if it were the only active revision.
+## Verification evidence
 
-The repair was deployed through `scripts/deploy-container.sh`, not the generic
-image deploy path. The script built the exact commit and atomically applied its
-durable template before checking readiness and revision ownership.
-
-## Production deployment evidence
-
-- ACR build `ch19w` completed successfully in 4m49s. Image:
-  `sociobotregistry.azurecr.io/sf-family-doodle-relay:3fec115406cb`
-  (digest `sha256:a4c15f0b574c00cb989457f676faac1f024a1685fa1b1626b4406583fe71b5bd`).
-- The live app validator accepts revision
-  `sf-family-doodle-relay--0000037`, the expected image, one replica, and the
-  `/data` mount.
-- Revision ownership validator accepts exactly one active revision at 100%
-  traffic. Azure reports `Healthy`, `RunningAtMaxScale`, and one replica.
-- Template uses the `family-doodle-relay-data` Azure File volume at `/data`
-  with `uid=10001,gid=10001,file_mode=0770,dir_mode=0770` and min/max replicas
-  of one.
-- Live `GET /health` returned `status: ok` and exact build SHA
-  `3fec115406cb3e4823154277b0a4827d678c33ad`.
-
-Future releases must continue to use `./scripts/deploy-container.sh`; the
-backend intentionally refuses an Azure Container Apps process without its
-durable `/data` volume.
-
-## Verification performed
-
-- Clean install: `npm ci` completed with 48 packages and no audit findings.
-- `npm test`: passed Vite production build, TypeScript, 7 Rust tests, 8
-  deployment contract tests, and 22 Chromium tests in 44.8s. This includes all
-  15 manifest claims.
-- `npm run typecheck`, `npm run lint`, `npm run build`, `cargo build --release`,
-  and `npm audit --audit-level=high` all passed. The production bundle is
-  27.03 kB JS (9.44 kB gzip) and 9.95 kB CSS (2.94 kB gzip).
-- ACR performed the real multi-stage container build; a local Docker CLI was
-  not available in this worker.
-- Live desktop keyboard flow opened `/?demo=1`, made a sample mark with Space,
+- Clean install: `npm ci` installed 48 packages; audit found 0 vulnerabilities.
+- Every one of the 15 literal commands in `.factory/claims.json` passed from
+  the clean install. Each browser claim ran in its own server/browser state.
+- `npm test`: PASS — production Vite build, TypeScript, 7 Rust tests, 9
+  deployment tests, and 22 Chromium tests in 41.7 seconds.
+- `npm run typecheck`, `npm run lint` (format plus Clippy with warnings denied),
+  `npm run build`, `cargo build --release`, `npm audit --audit-level=high`,
+  `bash -n scripts/deploy-container.sh`, and `git diff --check`: PASS.
+- Production assets: 27,033 B JavaScript (9.44 kB gzip) and 9,953 B CSS
+  (2.94 kB gzip). No package/consumer check applies to this web-with-backend
+  artifact. Docker was unavailable locally; ACR completed the real 22-step
+  multi-stage container build from a source archive without `.git`.
+- With no environment variables, the release binary started on port 8080,
+  generated its local SQLite store, returned `status: ok`, served the security
+  policy, and shut down gracefully. Local `verify-url.sh` passed in 588 ms with
+  no console errors. Local mobile Lighthouse scored 100 Performance, 100
+  Accessibility, 100 Best Practices, and 100 SEO; LCP was 1.50 s, CLS was 0,
+  and transfer was 106,182 B.
+- Live `verify-url.sh` passed in 551 ms with one `<h1>`, one `<main>`, `lang=en`,
+  complete image alternatives, labelled buttons, and no browser errors.
+- Live route scans of `/`, `/demo`, `/play`, `/privacy`, `/terms`, and the
+  designed HTTP 404 found no serious or critical Axe issue. Titles, one h1,
+  and one main landmark were correct on every route.
+- Live desktop keyboard use opened the one-click demo, added a mark with Space,
   finished with Enter, and downloaded `family-doodle-relay.png`. The focus ring
-  is a 4 px press-red outline.
-- Fresh live two-browser host/390 px guest flow created a room (201), validated
-  an invalid invite with `aria-invalid`, joined and reloaded both players,
-  showed “Both players are here”, ended for both players, and returned 404 on
-  the ended-room read. No browser errors occurred.
-- Live browser scan found no serious or critical Axe issue on `/`, `/demo`,
-  `/play`, `/privacy`, `/terms`, or the designed 404. Each route has `lang=en`,
-  one `h1`, one `main`, and complete image alt coverage. The only console entry
-  was the expected browser failed-resource message when deliberately loading
-  the HTTP 404 route.
-- At 390 px, the demo has no horizontal overflow and no visible target under
-  44 px. Reduced-motion animation durations are `0.00001s` and scroll behavior
-  is `auto`.
-- Fresh demo browser storage, session storage, and cookies remained empty; all
-  observed requests were same-origin. It reloaded offline under an active
-  service worker. A live service-worker update left one active worker with no
-  waiting or installing worker.
-- Live rate probes allowed 20 API and 20 page requests per trusted client;
-  excess requests were 429 with `Retry-After: 1`. The Sociobot verifier's own
-  observed limit was 30 then 429 with `Retry-After: 4`.
-- Response policy check confirmed no-cache HTML/API and service worker,
-  immutable hashed JS, CSP with `frame-ancestors 'none'`, `nosniff`,
-  `no-referrer`, and disabled camera/microphone/geolocation.
-- `/opt/fleet/lib/verify-url.sh` passed live in 550 ms with no console errors,
-  title, language, one h1, main landmark, image alternatives, and labelled
-  buttons.
-- Live mobile Lighthouse: Performance 100, Accessibility 100, Best Practices
-  100, SEO 100; FCP 1.2 s, LCP 1.5 s, CLS 0, transfer 101 KiB, no warnings.
+  measured 4 px in press red.
+- At 390 px there was no horizontal overflow and no visible interactive target
+  below 44 px. Reduced-motion animations measured `0.00001s`, scrolling was
+  instant, and 200% text resizing kept the h1 and main visible without overflow.
+- The complete demo flow left local storage, session storage, and cookies empty;
+  all recorded requests were same-origin. Service-worker update left one active
+  worker with none waiting or installing. After browser cache clear and network
+  disablement, the controlled demo reloaded with its sample state.
+- A live desktop-host/390px-guest flow returned 201 for room creation, announced
+  an invalid invite with `aria-invalid=true`, joined both players, preserved
+  presence through guest reload, propagated host-controlled ending, and returned
+  404 for the ended room. Browser error capture stayed empty.
+- Three fresh live rooms each passed six concurrent reads and a join. Six health
+  requests all returned the deployed build identity.
+- The live API and page probes each returned 20 normal responses followed by 35
+  `429` responses with `Retry-After: 1`. The Sociobot license verifier returned
+  30 normal responses followed by 10 `429` responses with `Retry-After: 4`.
+- Response policy is `no-cache` for HTML, API, health, and the service worker;
+  hashed assets are immutable for one year. CSP includes header-only
+  `frame-ancestors 'none'`; `nosniff`, `no-referrer`, and disabled camera,
+  microphone, and geolocation policies are present.
+- Live mobile Lighthouse scored 100 Performance, 100 Accessibility, 100 Best
+  Practices, and 100 SEO; FCP was 1.09 s, LCP was 1.47 s, CLS was 0, transfer
+  was 103,883 B, and there were no run warnings.
 
-## Known gaps
+## Known gaps and next steps
 
-None. This is a web-with-backend product, not a published package, so no
-package-consumer test applies.
+None. Future releases and independent candidate staging must use
+`./scripts/deploy-container.sh`; a generic Container App image replacement
+removes this product's persistent room store and is deliberately rejected by
+the runtime and regression suite.
