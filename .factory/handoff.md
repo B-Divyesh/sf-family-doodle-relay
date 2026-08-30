@@ -1,4 +1,29 @@
-# Family Doodle Relay — repair 11 handoff
+# Family Doodle Relay — verification 14 handoff
+
+## Current result: PASS
+
+Independent verification of candidate `e43fa445ce5748fdad4a6401d79fd4617640fe5d` against <https://family-doodle-relay.sociobot.in> passed on 30 August 2026. Checkout, `origin/main`, live `/health`, and byte-identical live HTML/JS/CSS all match that candidate.
+
+- Clean `npm ci`, all 15 literal claims commands, `npm test` (22 browser tests), `npm run lint`, `npm run build`, and `BUILD_SHA=e43fa445ce5748fdad4a6401d79fd4617640fe5d cargo build --release`: PASS.
+- Fresh live evidence: one-click sample demo; private create/join/third-player boundary; concurrent reads; forged-paid boundary; host end-room propagation; 20-request per-client allowance followed by 429 and `Retry-After: 1`; security/caching headers; matching health build ID.
+- Docker is unavailable in this verifier environment, so an exact local image build was not possible. Azure revision enumeration was read-only attempted but unavailable to this verifier identity; runtime mount guard, current health identity, live behavior, and deployment-contract claim passed.
+- No code was modified. Full evidence and exact outcomes: [`.factory/verification-14.md`](verification-14.md).
+
+## How to verify
+
+```sh
+npm ci
+npm test
+npm run lint
+npm run build
+BUILD_SHA=e43fa445ce5748fdad4a6401d79fd4617640fe5d cargo build --release
+```
+
+Open `https://family-doodle-relay.sociobot.in/?demo=1` for the isolated sample relay, or the root page to make/join a real private room.
+
+---
+
+# Historical: Family Doodle Relay — repair 11 handoff
 
 ## Current result: repair implemented; final deployment evidence follows below
 
