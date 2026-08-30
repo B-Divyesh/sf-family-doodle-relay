@@ -49,7 +49,7 @@ This browser keeps private room keys and an optional purchase license in local s
 
 ## Deploy
 
-The factory builds the root `Dockerfile` and supplies `PORT` plus `BUILD_SHA`. Push a clean release commit, then run `./scripts/deploy-container.sh <full-commit-sha>`. The script checks that the checkout and `origin/main` match before it touches Azure. It then waits for one ready app instance with persistent room storage and checks the live build ID. DNS, billing product registration, and infrastructure stay outside this repository.
+The factory builds the root `Dockerfile` and supplies `PORT` plus `BUILD_SHA`. Push a clean release commit, then run `./scripts/deploy-container.sh <full-commit-sha>`. The script checks that the checkout and `origin/main` match before it touches Azure. It stages the complete Azure Files `/data` template at zero traffic, requires one healthy replica, and only then moves 100% traffic to it. It retires the previous room owner after the traffic switch and checks the live build ID. DNS, billing product registration, and infrastructure stay outside this repository.
 
 ## License
 

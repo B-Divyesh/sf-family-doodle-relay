@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Deploy the relay with its durable, single-owner room store. Build the image
-# here, then patch the complete revision template in one operation: the generic
-# factory container deployer starts a new image without this product's /data
-# mount, which makes this backend correctly refuse to boot.
+# Deploy the relay with its durable, single-owner room store. A new revision is
+# created with the complete /data template at zero traffic. Only after its
+# mount, replica bounds, process health, and physical replica are verified does
+# traffic move from the prior healthy owner. The generic factory container
+# template is intentionally unsuitable for this stateful backend.
 set -euo pipefail
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -40,25 +41,59 @@ az acr build --registry "$registry" --image "$image_tag" --file Dockerfile \
   --build-arg "BUILD_SHA=$source_sha" --build-arg "GIT_SHA=$source_sha" --build-arg "SOURCE_COMMIT=$source_sha" \
   "$repo_dir"
 image="${registry}.azurecr.io/${image_tag}"
-deployment_patch="$(node "$repo_dir/scripts/deployment-contract.mjs" --template --image "$image")"
+
+echo "== restore one durable stable owner before staging"
+stable_revision="$(az containerapp show --resource-group "$resource_group" --name "$app_name" --query properties.latestReadyRevisionName -o tsv)"
+[ -n "$stable_revision" ] || { echo "No ready revision is available for a zero-downtime deployment." >&2; exit 1; }
+stable_json="$(az containerapp revision show --resource-group "$resource_group" --name "$app_name" --revision "$stable_revision" -o json)"
+printf '%s' "$stable_json" | node "$repo_dir/scripts/deployment-contract.mjs" --ready-revision
+
+az containerapp revision set-mode --resource-group "$resource_group" --name "$app_name" --mode multiple --only-show-errors -o none
+az containerapp ingress traffic set --resource-group "$resource_group" --name "$app_name" --revision-weight "${stable_revision}=100" --only-show-errors -o none
+while IFS= read -r failed_revision; do
+  [ -z "$failed_revision" ] && continue
+  az containerapp revision deactivate --resource-group "$resource_group" --name "$app_name" --revision "$failed_revision" --only-show-errors -o none || true
+done < <(az containerapp revision list --resource-group "$resource_group" --name "$app_name" --query "[?properties.active && name!='${stable_revision}'].name" -o tsv)
+
+stable_ownership="$(az containerapp revision list --resource-group "$resource_group" --name "$app_name" -o json)"
+printf '%s' "$stable_ownership" | node "$repo_dir/scripts/deployment-contract.mjs" --revisions --expected-revision "$stable_revision"
+
+echo "== stage the complete durable template at zero traffic"
+deployment_patch="$(node "$repo_dir/scripts/deployment-contract.mjs" --template --image "$image" --stable-revision "$stable_revision")"
 az rest --method patch --url "$app_url" --body "$deployment_patch" --only-show-errors -o none
 
-echo "== wait for the durable single-owner revision"
-deployment_ready=false
+echo "== wait for mount, replica bounds, and candidate health"
+candidate_revision=""
+promotion_ready=false
 for _ in $(seq 1 40); do
   app_json="$(az containerapp show --resource-group "$resource_group" --name "$app_name" -o json)"
-  if summary="$(printf '%s' "$app_json" | node "$repo_dir/scripts/deployment-contract.mjs" --expected-image "$image" 2>/dev/null)"; then
-    latest_revision="$(printf '%s' "$app_json" | node -e "let input='';process.stdin.on('data',chunk=>input+=chunk);process.stdin.on('end',()=>process.stdout.write(JSON.parse(input).properties.latestReadyRevisionName))")"
-    replica_count="$(az containerapp replica list --resource-group "$resource_group" --name "$app_name" --revision "$latest_revision" --query 'length(@)' -o tsv)"
+  candidate_revision="$(printf '%s' "$app_json" | node -e "let input='';process.stdin.on('data',chunk=>input+=chunk);process.stdin.on('end',()=>process.stdout.write(JSON.parse(input).properties.latestRevisionName||''))")"
+  revisions_json="$(az containerapp revision list --resource-group "$resource_group" --name "$app_name" -o json)"
+  if [ "$candidate_revision" != "$stable_revision" ] && summary="$(printf '%s' "$revisions_json" | node "$repo_dir/scripts/deployment-contract.mjs" --promotion-ready --expected-revision "$candidate_revision" --stable-revision "$stable_revision" --expected-image "$image" 2>/dev/null)"; then
+    replica_count="$(az containerapp replica list --resource-group "$resource_group" --name "$app_name" --revision "$candidate_revision" --query 'length(@)' -o tsv)"
     if [ "$replica_count" = "1" ]; then
-      deployment_ready=true
+      promotion_ready=true
       echo "$summary"
       break
     fi
   fi
   sleep 10
 done
-[ "$deployment_ready" = true ] || { echo "The durable single-owner deployment did not become ready." >&2; exit 1; }
+[ "$promotion_ready" = true ] || { echo "The zero-traffic durable candidate did not become healthy." >&2; exit 1; }
+
+echo "== switch 100 percent traffic to the proven healthy candidate"
+az containerapp ingress traffic set --resource-group "$resource_group" --name "$app_name" --revision-weight "${candidate_revision}=100" --only-show-errors -o none
+traffic_ready=false
+for _ in $(seq 1 20); do
+  revisions_json="$(az containerapp revision list --resource-group "$resource_group" --name "$app_name" -o json)"
+  if switched="$(printf '%s' "$revisions_json" | node "$repo_dir/scripts/deployment-contract.mjs" --traffic-switched --expected-revision "$candidate_revision" --expected-image "$image" 2>/dev/null)"; then
+    traffic_ready=true
+    echo "$switched"
+    break
+  fi
+  sleep 5
+done
+[ "$traffic_ready" = true ] || { echo "Traffic did not converge on the healthy durable candidate." >&2; exit 1; }
 
 echo "== deactivate superseded room owners"
 while IFS= read -r old_revision; do
@@ -69,13 +104,17 @@ while IFS= read -r old_revision; do
       exit 1
     fi
   fi
-done < <(az containerapp revision list --resource-group "$resource_group" --name "$app_name" --query "[?properties.active && name!='${latest_revision}'].name" -o tsv)
+done < <(az containerapp revision list --resource-group "$resource_group" --name "$app_name" --query "[?properties.active && name!='${candidate_revision}'].name" -o tsv)
+
+az containerapp revision set-mode --resource-group "$resource_group" --name "$app_name" --mode single --only-show-errors -o none
 
 ownership_ready=false
 for _ in $(seq 1 30); do
   revisions_json="$(az containerapp revision list --resource-group "$resource_group" --name "$app_name" -o json)"
-  if ownership="$(printf '%s' "$revisions_json" | node "$repo_dir/scripts/deployment-contract.mjs" --revisions --expected-revision "$latest_revision" 2>/dev/null)"; then
+  app_json="$(az containerapp show --resource-group "$resource_group" --name "$app_name" -o json)"
+  if final_template="$(printf '%s' "$app_json" | node "$repo_dir/scripts/deployment-contract.mjs" --expected-image "$image" 2>/dev/null)" && ownership="$(printf '%s' "$revisions_json" | node "$repo_dir/scripts/deployment-contract.mjs" --revisions --expected-revision "$candidate_revision" 2>/dev/null)"; then
     ownership_ready=true
+    echo "$final_template"
     echo "$ownership"
     break
   fi

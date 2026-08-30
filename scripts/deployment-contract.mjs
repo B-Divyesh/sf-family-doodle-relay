@@ -4,11 +4,17 @@ import process from 'node:process';
 
 const FULL_GIT_SHA = /^[0-9a-f]{40}$/;
 
-export function durableDeploymentPatch(image) {
+export function durableDeploymentPatch(image, stableRevision = '') {
   if (!image) throw new Error('an image is required for the durable deployment patch');
+  if (!stableRevision) throw new Error('a stable revision is required for a zero-traffic deployment');
   return {
     properties: {
-      configuration: { activeRevisionsMode: 'Single' },
+      configuration: {
+        activeRevisionsMode: 'Multiple',
+        ingress: {
+          traffic: [{ revisionName: stableRevision, weight: 100 }],
+        },
+      },
       template: {
         containers: [{
           name: 'app',
@@ -29,24 +35,18 @@ export function durableDeploymentPatch(image) {
   };
 }
 
-export function deploymentContractErrors(app, expectedImage = '') {
+export function deploymentTemplateErrors(template, expectedImage = '') {
   const errors = [];
-  const properties = app?.properties ?? {};
-  const configuration = properties.configuration ?? {};
-  const template = properties.template ?? {};
-  const containers = template.containers ?? [];
+  const containers = template?.containers ?? [];
   const container = containers.find(item => item.name === 'app');
-  const volumes = template.volumes ?? [];
+  const volumes = template?.volumes ?? [];
   const volume = volumes.find(item => item.name === 'relay-data');
   const mount = container?.volumeMounts?.find(item => item.volumeName === 'relay-data');
 
-  if (configuration.activeRevisionsMode !== 'Single') {
-    errors.push('active revisions mode must be Single');
-  }
-  if (template.scale?.minReplicas !== 1) {
+  if (template?.scale?.minReplicas !== 1) {
     errors.push('minimum replicas must be 1');
   }
-  if (template.scale?.maxReplicas !== 1) {
+  if (template?.scale?.maxReplicas !== 1) {
     errors.push('maximum replicas must be 1');
   }
   if (!container) {
@@ -68,10 +68,104 @@ export function deploymentContractErrors(app, expectedImage = '') {
       errors.push(`relay-data mount options must include ${option}`);
     }
   }
+  return errors;
+}
+
+export function deploymentContractErrors(app, expectedImage = '') {
+  const errors = [];
+  const properties = app?.properties ?? {};
+  const configuration = properties.configuration ?? {};
+  const template = properties.template ?? {};
+
+  if (configuration.activeRevisionsMode !== 'Single') {
+    errors.push('active revisions mode must be Single');
+  }
+  errors.push(...deploymentTemplateErrors(template, expectedImage));
   if (properties.latestRevisionName !== properties.latestReadyRevisionName) {
     errors.push('latest revision is not ready');
   }
   return errors;
+}
+
+export function readyRevisionErrors(revision, expectedImage = '') {
+  if (!revision) return ['revision is missing'];
+  const errors = deploymentTemplateErrors(revision.properties?.template ?? {}, expectedImage);
+  if (revision.properties?.healthState !== 'Healthy') {
+    errors.push('revision must be healthy');
+  }
+  if (!['Running', 'RunningAtMaxScale'].includes(revision.properties?.runningState)) {
+    errors.push('revision must be running');
+  }
+  if (revision.properties?.replicas !== 1) {
+    errors.push('revision must have exactly one replica');
+  }
+  return errors;
+}
+
+export function assertReadyRevision(revision, expectedImage = '') {
+  const errors = readyRevisionErrors(revision, expectedImage);
+  if (errors.length) {
+    throw new Error(`ready revision failed: ${errors.join('; ')}`);
+  }
+  return { revision: revision.name, replicas: 1, dataMount: '/data' };
+}
+
+function revisionNamed(revisions, name) {
+  return revisions.find(revision => revision?.name === name);
+}
+
+export function promotionReadinessErrors(revisions, candidateRevision, stableRevision, expectedImage = '') {
+  const errors = [];
+  const candidate = revisionNamed(revisions, candidateRevision);
+  const stable = revisionNamed(revisions, stableRevision);
+
+  for (const error of readyRevisionErrors(candidate, expectedImage)) {
+    errors.push(`candidate ${error}`);
+  }
+  if (candidate?.properties?.trafficWeight !== 0) {
+    errors.push('candidate must remain at zero traffic until health succeeds');
+  }
+  for (const error of readyRevisionErrors(stable)) {
+    errors.push(`stable ${error}`);
+  }
+  if (stable?.properties?.trafficWeight !== 100) {
+    errors.push('stable revision must retain 100 percent of traffic before promotion');
+  }
+  return errors;
+}
+
+export function assertPromotionReady(revisions, candidateRevision, stableRevision, expectedImage = '') {
+  const errors = promotionReadinessErrors(revisions, candidateRevision, stableRevision, expectedImage);
+  if (errors.length) {
+    throw new Error(`promotion readiness failed: ${errors.join('; ')}`);
+  }
+  return { candidate: candidateRevision, stable: stableRevision, candidateTraffic: 0, stableTraffic: 100 };
+}
+
+export function trafficSwitchErrors(revisions, candidateRevision, expectedImage = '') {
+  const errors = [];
+  const candidate = revisionNamed(revisions, candidateRevision);
+  for (const error of readyRevisionErrors(candidate, expectedImage)) {
+    errors.push(`candidate ${error}`);
+  }
+  if (candidate?.properties?.trafficWeight !== 100) {
+    errors.push('healthy candidate must receive 100 percent of traffic');
+  }
+  const otherTraffic = revisions.filter(revision => (
+    revision?.name !== candidateRevision && (revision?.properties?.trafficWeight ?? 0) !== 0
+  ));
+  if (otherTraffic.length) {
+    errors.push('no other revision may receive traffic after promotion');
+  }
+  return errors;
+}
+
+export function assertTrafficSwitched(revisions, candidateRevision, expectedImage = '') {
+  const errors = trafficSwitchErrors(revisions, candidateRevision, expectedImage);
+  if (errors.length) {
+    throw new Error(`traffic switch failed: ${errors.join('; ')}`);
+  }
+  return { revision: candidateRevision, replicas: 1, trafficWeight: 100 };
 }
 
 export function assertDeploymentContract(app, expectedImage = '') {
@@ -163,7 +257,7 @@ async function main() {
   if (process.argv.includes('--template')) {
     const imageIndex = process.argv.indexOf('--image');
     const image = imageIndex >= 0 ? process.argv[imageIndex + 1] : '';
-    process.stdout.write(`${JSON.stringify(durableDeploymentPatch(image))}\n`);
+    process.stdout.write(`${JSON.stringify(durableDeploymentPatch(image, argument('--stable-revision')))}\n`);
     return;
   }
   if (process.argv.includes('--source-identity')) {
@@ -184,9 +278,18 @@ async function main() {
   let input = '';
   for await (const chunk of process.stdin) input += chunk;
   const parsed = JSON.parse(input);
-  const summary = process.argv.includes('--revisions')
-    ? assertRevisionOwnership(parsed, expectedRevision)
-    : assertDeploymentContract(parsed, expectedImage);
+  let summary;
+  if (process.argv.includes('--ready-revision')) {
+    summary = assertReadyRevision(parsed, expectedImage);
+  } else if (process.argv.includes('--promotion-ready')) {
+    summary = assertPromotionReady(parsed, expectedRevision, argument('--stable-revision'), expectedImage);
+  } else if (process.argv.includes('--traffic-switched')) {
+    summary = assertTrafficSwitched(parsed, expectedRevision, expectedImage);
+  } else if (process.argv.includes('--revisions')) {
+    summary = assertRevisionOwnership(parsed, expectedRevision);
+  } else {
+    summary = assertDeploymentContract(parsed, expectedImage);
+  }
   process.stdout.write(`${JSON.stringify(summary)}\n`);
 }
 

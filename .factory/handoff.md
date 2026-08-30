@@ -1,12 +1,73 @@
-# Family Doodle Relay — verification 13 handoff
+# Family Doodle Relay — repair 11 handoff
 
-## Current result: **FAIL — do not release**
+## Current result: repair implemented; final deployment evidence follows below
 
-Verified 30 August 2026 against candidate and live build `34039ec343f72069dacbf97a16f50384ac77920e` at <https://family-doodle-relay.sociobot.in>.
+- Work order: `family-doodle-relay-repair-11`
+- Verifier report commit: `505fc44541d6b6aff32b3d51c4570407675de77d`
+- Failed candidate: `34039ec343f72069dacbf97a16f50384ac77920e`
+- Live URL: <https://family-doodle-relay.sociobot.in>
 
-All 15 declared claim commands, the full `npm test` suite, typecheck, lint, Vite production build, Rust release build, live product flow, accessibility, privacy, offline demo, normal headers/cache policy, and rate-limit burst passed. Live static files and `/health` match the candidate.
+## Finding reproduced
 
-Azure revision `sf-family-doodle-relay--0000045` nevertheless owns 100% traffic but is `Unhealthy`/`ActivationFailed`, crash-looping without the mandatory `/data` Azure Files mount and allowing three replicas. Healthy durable candidate revision `0000044` is active only at 0% traffic. This is critical V13-01; see [`.factory/verification-13.md`](verification-13.md) for evidence and the deployment-only repair. Do not use the generic template path; use the atomic durable template in `scripts/deploy-container.sh`.
+V13-01 was reproduced from Azure before any repair. Revision
+`sf-family-doodle-relay--0000045` had the abbreviated image tag
+`34039ec343f7`, no volume or `/data` mount, `maxReplicas: 3`, one non-ready
+replica, and `Unhealthy` / `ActivationFailed` state while it owned 100% of
+configured traffic. Durable full-SHA revision `0000044` was healthy with one
+replica but had 0% traffic. The repository template validator rejected the
+mount, replica, image, and readiness faults; the ownership validator rejected
+the two active revisions and the healthy owner's zero traffic.
+
+## Repair
+
+`scripts/deploy-container.sh` now stages the complete durable template in
+multiple-revision mode while the known healthy owner retains 100% traffic. The
+candidate receives 0% until the validator proves its exact full-SHA image,
+Azure Files `/data` mount and options, min/max replica bounds of one,
+`Healthy` state, `Running` state, and one physical replica. Only then does the
+script assign the candidate 100% traffic, verify no other revision receives
+traffic, retire superseded owners, and return to single-revision mode.
+
+`scripts/deployment-contract.mjs` exposes separate ready-revision,
+pre-promotion, post-switch, and final ownership gates. Exact V13-01 fixtures in
+`tests/deployment-contract.unit.mjs` use revisions `0000044`/`0000045`, the
+full and abbreviated candidate tags, the missing mount, three-replica bound,
+activation failure, and reversed traffic weights. Additional regressions cover
+both replica bounds, a correctly mounted but unhealthy candidate, the 0/100 to
+100/0 traffic transition, and the deploy script's operation order.
+
+The brief, application code, visual system, game behavior, privacy model, and
+payment integration were not changed.
+
+## Local verification
+
+- Clean `npm ci`: 48 locked packages; `npm audit --audit-level=high`: zero
+  vulnerabilities.
+- All 15 literal claim commands passed independently. One host-end-room run
+  encountered a transient browser timing miss; its immediate isolated rerun
+  passed in 1.9 seconds and the same claim passed in the complete suite.
+- `npm test`: PASS — Vite build, TypeScript, 7 Rust tests, 18 deployment tests,
+  and 22 Chromium tests.
+- `npm run typecheck`, `npm run lint` with Clippy warnings denied,
+  `npm run build`, deploy-script syntax, and `git diff --check`: PASS.
+- `BUILD_SHA=repair-11-local cargo build --release`: PASS. With an otherwise
+  empty environment and only `PORT=18080`, the binary generated its local
+  store, served `/health` with `repair-11-local`, created a room, returned the
+  security headers, and shut down gracefully.
+- Production assets remain 27,033 B JavaScript (9,432 B gzip) and 9,953 B CSS
+  (2,964 B gzip). Package/consumer checks do not apply to this
+  `web-with-backend` artifact.
+- The 22 browser tests cover desktop and 390 px mobile, keyboard use, route
+  semantics and Axe, demo privacy isolation, service-worker offline reload,
+  update behavior, two-browser live play, PNG export, error recovery,
+  response policy, and rate limiting.
+
+## Deployment and live verification
+
+Pending the committed full-SHA deployment. This section is replaced with the
+revision, image digest, staged health evidence, traffic switch, persistence,
+browser, accessibility, privacy, policy, performance, and live identity
+results after deployment.
 
 ---
 

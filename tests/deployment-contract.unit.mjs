@@ -1,14 +1,22 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
   assertDeploymentContract,
+  assertPromotionReady,
+  assertReadyRevision,
   assertRevisionOwnership,
   assertSourceIdentity,
+  assertTrafficSwitched,
   durableDeploymentPatch,
   deploymentContractErrors,
+  deploymentTemplateErrors,
+  promotionReadinessErrors,
+  readyRevisionErrors,
   revisionOwnershipErrors,
   sourceIdentityErrors,
+  trafficSwitchErrors,
 } from '../scripts/deployment-contract.mjs';
 
 const image = 'sociobotregistry.azurecr.io/sf-family-doodle-relay:repairsha123';
@@ -21,6 +29,37 @@ function appWith(template, revision = 'sf-family-doodle-relay--repair') {
       latestReadyRevisionName: revision,
       template,
     },
+  };
+}
+
+function durableTemplate(templateImage = image) {
+  return {
+    containers: [{
+      name: 'app',
+      image: templateImage,
+      volumeMounts: [{ volumeName: 'relay-data', mountPath: '/data' }],
+    }],
+    scale: { minReplicas: 1, maxReplicas: 1 },
+    volumes: [{
+      name: 'relay-data',
+      storageType: 'AzureFile',
+      storageName: 'family-doodle-relay-data',
+      mountOptions: 'uid=10001,gid=10001,file_mode=0770,dir_mode=0770',
+    }],
+  };
+}
+
+function revision(name, {
+  active = true,
+  healthState = 'Healthy',
+  runningState = 'RunningAtMaxScale',
+  replicas = 1,
+  trafficWeight = 0,
+  template = durableTemplate(),
+} = {}) {
+  return {
+    name,
+    properties: { active, healthState, runningState, replicas, trafficWeight, template },
   };
 }
 
@@ -342,6 +381,156 @@ test('regression V12-02: rejects the unavailable requested SHA before a release 
   );
 });
 
+test('regression V13-01: rejects exact activation-failed 0000045 and prevents its premature traffic ownership', () => {
+  const fullImage = 'sociobotregistry.azurecr.io/sf-family-doodle-relay:34039ec343f72069dacbf97a16f50384ac77920e';
+  const shortImage = 'sociobotregistry.azurecr.io/sf-family-doodle-relay:34039ec343f7';
+  const verifierV13App = appWith({
+    containers: [{
+      name: 'app',
+      image: shortImage,
+      env: [{ name: 'PORT', value: '8080' }],
+      volumeMounts: null,
+    }],
+    scale: {
+      cooldownPeriod: 300,
+      minReplicas: 1,
+      maxReplicas: 3,
+      pollingInterval: 30,
+      rules: null,
+    },
+    volumes: null,
+  }, 'sf-family-doodle-relay--0000045');
+  verifierV13App.properties.latestReadyRevisionName = 'sf-family-doodle-relay--0000044';
+
+  assert.deepEqual(deploymentContractErrors(verifierV13App, fullImage), [
+    'maximum replicas must be 1',
+    `app image must be ${fullImage}`,
+    'relay-data must be mounted at /data',
+    'relay-data must use the family-doodle-relay-data Azure Files storage',
+    'relay-data mount options must include uid=10001',
+    'relay-data mount options must include gid=10001',
+    'relay-data mount options must include file_mode=0770',
+    'relay-data mount options must include dir_mode=0770',
+    'latest revision is not ready',
+  ]);
+
+  const stable = revision('sf-family-doodle-relay--0000044', {
+    trafficWeight: 0,
+    template: durableTemplate(fullImage),
+  });
+  const failedCandidate = revision('sf-family-doodle-relay--0000045', {
+    healthState: 'Unhealthy',
+    runningState: 'ActivationFailed',
+    trafficWeight: 100,
+    template: verifierV13App.properties.template,
+  });
+
+  assert.deepEqual(
+    promotionReadinessErrors(
+      [stable, failedCandidate],
+      failedCandidate.name,
+      stable.name,
+      fullImage,
+    ),
+    [
+      'candidate maximum replicas must be 1',
+      `candidate app image must be ${fullImage}`,
+      'candidate relay-data must be mounted at /data',
+      'candidate relay-data must use the family-doodle-relay-data Azure Files storage',
+      'candidate relay-data mount options must include uid=10001',
+      'candidate relay-data mount options must include gid=10001',
+      'candidate relay-data mount options must include file_mode=0770',
+      'candidate relay-data mount options must include dir_mode=0770',
+      'candidate revision must be healthy',
+      'candidate revision must be running',
+      'candidate must remain at zero traffic until health succeeds',
+      'stable revision must retain 100 percent of traffic before promotion',
+    ],
+  );
+  assert.throws(
+    () => assertTrafficSwitched([stable, failedCandidate], failedCandidate.name, fullImage),
+    /candidate revision must be healthy/,
+  );
+});
+
+test('deployment contract rejects either replica bound outside exactly one', () => {
+  const tooFew = revision('relay--min-zero', {
+    template: { ...durableTemplate(), scale: { minReplicas: 0, maxReplicas: 1 } },
+  });
+  const tooMany = revision('relay--max-two', {
+    template: { ...durableTemplate(), scale: { minReplicas: 1, maxReplicas: 2 } },
+  });
+
+  assert.deepEqual(readyRevisionErrors(tooFew, image), ['minimum replicas must be 1']);
+  assert.deepEqual(readyRevisionErrors(tooMany, image), ['maximum replicas must be 1']);
+});
+
+test('promotion requires healthy zero-traffic candidate, then verifies the complete traffic switch', () => {
+  const stable = revision('relay--stable', { trafficWeight: 100 });
+  const candidate = revision('relay--candidate', { trafficWeight: 0 });
+
+  assert.deepEqual(assertReadyRevision(candidate, image), {
+    revision: 'relay--candidate',
+    replicas: 1,
+    dataMount: '/data',
+  });
+  assert.deepEqual(assertPromotionReady(
+    [stable, candidate],
+    candidate.name,
+    stable.name,
+    image,
+  ), {
+    candidate: 'relay--candidate',
+    stable: 'relay--stable',
+    candidateTraffic: 0,
+    stableTraffic: 100,
+  });
+  assert.deepEqual(trafficSwitchErrors([stable, candidate], candidate.name, image), [
+    'healthy candidate must receive 100 percent of traffic',
+    'no other revision may receive traffic after promotion',
+  ]);
+
+  stable.properties.trafficWeight = 0;
+  candidate.properties.trafficWeight = 100;
+  assert.deepEqual(assertTrafficSwitched([stable, candidate], candidate.name, image), {
+    revision: 'relay--candidate',
+    replicas: 1,
+    trafficWeight: 100,
+  });
+});
+
+test('promotion refuses an unhealthy revision even when its durable template is correct', () => {
+  const stable = revision('relay--stable', { trafficWeight: 100 });
+  const candidate = revision('relay--candidate', {
+    healthState: 'Unhealthy',
+    runningState: 'ActivationFailed',
+    trafficWeight: 0,
+  });
+
+  assert.deepEqual(promotionReadinessErrors(
+    [stable, candidate],
+    candidate.name,
+    stable.name,
+    image,
+  ), [
+    'candidate revision must be healthy',
+    'candidate revision must be running',
+  ]);
+});
+
+test('deploy script validates candidate health before assigning candidate traffic', () => {
+  const script = readFileSync(new URL('../scripts/deploy-container.sh', import.meta.url), 'utf8');
+  const readinessGate = script.indexOf('--promotion-ready');
+  const candidateSwitch = script.indexOf('--revision-weight "${candidate_revision}=100"');
+  const switchedGate = script.indexOf('--traffic-switched');
+  const retirement = script.indexOf('echo "== deactivate superseded room owners"');
+
+  assert.ok(readinessGate >= 0, 'promotion readiness gate must be invoked');
+  assert.ok(candidateSwitch > readinessGate, 'traffic switch must follow candidate health validation');
+  assert.ok(switchedGate > candidateSwitch, 'traffic switch must be verified');
+  assert.ok(retirement > switchedGate, 'the stable owner must remain until switched traffic is verified');
+});
+
 test('@claim:deployment-topology accepts only a pushed exact build with one ready durable app instance', () => {
   const source = '0123456789abcdef0123456789abcdef01234567';
   assert.deepEqual(assertSourceIdentity({
@@ -413,16 +602,16 @@ test('@claim:deployment-topology accepts only a pushed exact build with one read
 });
 
 test('deployment patch starts a new image with durable single-owner storage already attached', () => {
-  const patch = durableDeploymentPatch(image);
-  const deployment = appWith(patch.properties.template);
-  deployment.properties.configuration = patch.properties.configuration;
+  const patch = durableDeploymentPatch(image, 'sf-family-doodle-relay--stable');
 
-  assert.deepEqual(assertDeploymentContract(deployment, image), {
-    revision: 'sf-family-doodle-relay--repair',
-    image,
-    replicas: 1,
-    dataMount: '/data',
+  assert.deepEqual(patch.properties.configuration, {
+    activeRevisionsMode: 'Multiple',
+    ingress: {
+      traffic: [{ revisionName: 'sf-family-doodle-relay--stable', weight: 100 }],
+    },
   });
+  assert.deepEqual(deploymentTemplateErrors(patch.properties.template, image), []);
+  assert.throws(() => durableDeploymentPatch(image), /stable revision is required/);
 });
 
 test('rejects an unready revision or a stale image', () => {
