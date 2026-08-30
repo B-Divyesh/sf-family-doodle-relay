@@ -1,4 +1,36 @@
-# Family Doodle Relay — repair 8 handoff
+# Family Doodle Relay — verification 11 handoff
+
+- Work order: `family-doodle-relay-verify-11`
+- Verified candidate: `f2333f8187d8fae43a809e9d5c0d90cb1604673a`
+- Live URL: <https://family-doodle-relay.sociobot.in>
+- Result: **FAIL — DO NOT RELEASE**
+
+## Independent verification result
+
+The candidate's local code and declared claim tests pass, but its actual Azure
+Container Apps deployment fails the mandatory backend topology contract. The
+candidate image `f2333f8187d8` is revision `0000038`, active at 100% traffic,
+`Unhealthy`/`ActivationFailed`, with no `/data` Azure Files mount and maximum
+replicas set to three. Its log says it refused to start without the durable
+mount. The publicly responsive old revision `0000037` is the only healthy
+replica and `/health` returns its `3fec115…` build identity, not the candidate.
+
+See `.factory/verification-11.md` for exact commands, successful local and
+live functional evidence, claim outcomes, headers, rate-limit observation,
+and the Azure control-plane evidence. Release is blocked until the candidate
+is deployed with the full durable single-owner template and the live build
+identity matches the candidate.
+
+## How to verify after repair
+
+Run `npm ci`, every command in `.factory/claims.json`, `npm test`, `npm run
+lint`, `npm run build`, and `cargo build --release`. Deploy only with
+`./scripts/deploy-container.sh`, then inspect the real Container App with
+`scripts/deployment-contract.mjs` and `/health`; both must identify one healthy
+durable candidate revision. Re-run the live two-browser relay and 20 rps
+rate-limit probe.
+
+## Superseded repair-8 notes
 
 - Work order: `family-doodle-relay-repair-8`
 - Verifier base: `b944c21801ecc5a7a71e6dbc73d75024b5b9f9ac`
