@@ -64,10 +64,53 @@ payment integration were not changed.
 
 ## Deployment and live verification
 
-Pending the committed full-SHA deployment. This section is replaced with the
-revision, image digest, staged health evidence, traffic switch, persistence,
-browser, accessibility, privacy, policy, performance, and live identity
-results after deployment.
+Repair commit `2263b5ea8c87f51c65df26c32b2cda7166484a84` was pushed and
+deployed through the repository script. ACR build `ch1fk` completed all 22
+Docker stages in 4m23s without `.git` and produced image digest
+`sha256:148fdb4a39ad31a953ae4689a77a0aceabe65a9e97ea1c91414e99744d538188`.
+
+The deployment first restored revision `0000044` as the sole healthy owner at
+100% traffic and deactivated failed generic revision `0000045`. It then staged
+full-SHA revision `0000046` at 0% traffic while `0000044` remained at 100%.
+The pre-promotion gate proved `0000046` healthy/running with one physical
+replica, min/max replicas of one, and `family-doodle-relay-data` mounted at
+`/data` with `uid=10001,gid=10001,file_mode=0770,dir_mode=0770`. Only after
+that pass did traffic move to `0000046`. The post-switch gate proved 100/0
+weights; the final gate proved single mode, one active healthy owner, one
+replica, 100% traffic, the full image tag, and matching live `/health` SHA.
+
+A live room was created on `0000046` before the final handoff deployment. The
+final deployment repeats the same staged sequence from the committed repository
+HEAD; the saved room is read afterward to verify durable revision handoff.
+
+Evidence is in [`.factory/repair-11-evidence/`](repair-11-evidence/).
+
+- Live desktop and 390 px mobile completed a two-person four-turn relay and
+  downloaded a 1200×728 PNG. Invalid/blank input recovery, the 80-character
+  boundary, focus preservation, eight concurrent reads, third-person denial,
+  forged paid input, reload presence, and host end-room propagation passed.
+- `/`, `/demo`, `/play`, `/privacy`, `/terms`, and the real HTTP 404 each have
+  `lang=en`, one h1, one main, no missing alt, no console/page errors, and no
+  serious or critical Axe findings. All visible mobile targets are at least
+  44×44 px; 390 px has no base overflow; focus is a 4 px press-red outline;
+  reduced motion is effectively instant; and the 200% zoom view retains its
+  h1 and main content.
+- Demo state preserved local/session/cookie sentinels, made no off-origin or
+  room API request, and downloaded locally. The service worker had one active
+  worker with none waiting/installing and reloaded the controlled demo offline.
+- Live API and page bursts each returned exactly 20 normal responses then 35
+  `429` responses with `Retry-After: 1`. Six independent health requests all
+  returned the full build SHA.
+- HTML uses `no-cache`; hashed assets use one-year immutable caching. CSP,
+  `nosniff`, no-referrer, and disabled camera/microphone/geolocation headers
+  passed on normal, API, health, and 404 responses. Live HTML, JS, and CSS were
+  byte-identical to `dist/`. Sociobot checkout returned 303 and license verify
+  returned 200.
+- Live mobile Lighthouse: 100 Performance, 100 Accessibility, 100 Best
+  Practices, 100 SEO; FCP 1.1 s, LCP 1.4 s, TBT 0 ms, CLS 0, total 101 KiB,
+  with no run warnings.
+
+No known product or release gap remains.
 
 ---
 

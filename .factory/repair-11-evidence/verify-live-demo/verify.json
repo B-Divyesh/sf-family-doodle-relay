@@ -1,0 +1,14 @@
+{
+  "url": "https://family-doodle-relay.sociobot.in/demo",
+  "loadMs": 725,
+  "errors": [],
+  "a11y": {
+    "title": "Demo — Family Doodle Relay",
+    "lang": "en",
+    "h1": 1,
+    "main": true,
+    "imgsMissingAlt": 0,
+    "buttonsUnlabeled": 0,
+    "textLength": 539
+  }
+}
