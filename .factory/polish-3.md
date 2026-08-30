@@ -60,4 +60,4 @@ Local repair commit: `cba8f0f72607b143a8183c6aa393f8047327636c`
 
 ## Deployment note
 
-The repository deployment helper requires shared resources named `sociobotregistry`, `factory-env`, and a shared storage account. It was not run because this work order permits only resources named `sf-family-doodle-relay`. This is an external execution boundary, not an open product finding.
+The repository deployment helper requires shared resources named `sociobotregistry`, `factory-env`, and a shared storage account. It was not run because this work order permits only resources named `sf-family-doodle-relay`. After the repair push, a cold public `/health` request still returned prior build `e43fa445ce5748fdad4a6401d79fd4617640fe5d`. This is an external execution boundary, not an open product finding.

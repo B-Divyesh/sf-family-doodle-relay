@@ -44,6 +44,6 @@ Open <http://127.0.0.1:8080/?demo=1> for the isolated sample relay.
 
 ## Deployment boundary
 
-The checked-in deployment helper is not run in this work order because it reads or modifies shared resources named `sociobotregistry`, `factory-env`, and a shared storage account. That conflicts with the controller’s explicit rule to access only resources named `sf-family-doodle-relay`. The repository is left committed, pushed, and buildable; public live evidence is recorded only if an allowed product-scoped deployment path becomes available.
+The checked-in deployment helper is not run in this work order because it reads or modifies shared resources named `sociobotregistry`, `factory-env`, and a shared storage account. That conflicts with the controller’s explicit rule to access only resources named `sf-family-doodle-relay`. The repository is committed and pushed at `a3ecf1f6c99f403568f0c7ab85be547d93f49dae`. A cold public `/health` check after the push still reported the earlier build `e43fa445ce5748fdad4a6401d79fd4617640fe5d`, confirming that a permitted deployment has not occurred.
 
 No product-code, test, accessibility, privacy, copy, or build finding remains. Deployment is the only external action withheld by the resource-isolation rule.
