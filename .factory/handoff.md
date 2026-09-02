@@ -1,49 +1,35 @@
-# Family Doodle Relay — polish round 3 handoff
+# Family Doodle Relay — verification 15 handoff
 
 ## Result
 
-All findings in reviews 1–3 are repaired in the repository. The repair preserves the hand-drawn relay visual system and the Rust/SQLite container architecture. The exact finding map is in [`.factory/polish-3.md`](polish-3.md).
+**FAIL** for candidate `bfdf4ec5b7b9f9b0d178fa8d3a08b116bfab9573` at <https://family-doodle-relay.sociobot.in>.
 
-Repair commit: `cba8f0f72607b143a8183c6aa393f8047327636c` (documentation evidence is committed separately).
+The exact candidate is live, byte-identical to the local frontend build, and the real private two-person relay works. Release is blocked because `npm test` fails deterministically: the 20-request page limiter counts the app shell and static files, returns 429 during the suite, and causes `@claim:license-check-data-flow` to time out. The same limiter returned 429 for live `/sw.js` during a two-browser reload flow.
 
-## What changed
+Full evidence and the one high-severity defect are in [`.factory/verification-15.md`](verification-15.md).
 
-- Added behavioral claim coverage for the $6 one-time checkout, merchant of record, license data flow, refunded licenses, and SQLite room fields.
-- Stored host and guest access keys as SHA-256 digests. Existing plaintext rows migrate in place without invalidating browser credentials.
-- Listed all 19 user-reliant claims and enforced one dedicated test per claim ID.
-- Disclosed every SQLite room field and the exact optional license-verification flow.
-- Removed the dead verification link and rewrote checkout, refund, deployment, demo, and claim-command wording in plain language.
-- Kept one-click isolated `/?demo=1` and `/demo`, its persistent banner, reset, exit, separate in-memory sample state, and zero room-API writes.
-- Bumped the release and service-worker cache to 1.0.3/v4.
+## Verification summary
 
-## Verification
+- Every literal claims command: 19/19 passed independently after `npm ci`.
+- `npm test`: **FAIL twice**, 23 passed and 1 failed each run.
+- `npm run lint`, `npm run build`, and release Cargo build: pass.
+- Cold first read and one-click demo: pass.
+- Live first-time host/guest flow, four-turn relay, mobile layout, 80-character boundary, PNG export, host closure, invalid input recovery, concurrency, persistence, privacy log, offline reload, Axe, security headers, and build identity: pass.
+- Live rate limits: product API 20 allowed then 429 with `Retry-After: 1`; product-license verifier 30 allowed then 429 with `Retry-After: 4`.
+- Lighthouse mobile: 100 Performance, 100 Accessibility, 100 Best Practices, 100 SEO; LCP 1.35 s, TBT 0 ms, CLS 0.
 
-All local gates passed on 30 August 2026:
+## Required next step
 
-- `npm test`: Vite production build, TypeScript, 9 Rust tests, claim-manifest validation, 18 deployment-contract tests, and 24 Chromium tests.
-- `npm run lint`, `npm run build`, and `git diff --check`: pass.
-- Every literal `.factory/claims.json[].test` command: 19/19 pass independently after `npm ci` in clean clone `/tmp/family-doodle-relay-polish3.i3HFdS`.
-- `BUILD_SHA=cba8f0f72607b143a8183c6aa393f8047327636c cargo build --release`: pass.
-- The release binary started with an otherwise empty environment and only `PORT=18081`, generated its SQLite configuration, returned the full build SHA from `/health`, created a room, and shut down cleanly.
-- Playwright covers all route metadata, real HTTP 404, navigation focus/history, Axe on every route, 390 px layout and touch targets, keyboard controls, 200% text wrapping, isolated demo reset/exit, privacy request logs, service-worker offline reload, two-browser relay, free PNG export, host room closure, license states, and 429/`Retry-After` behavior.
-- Local `verify-url.sh` reports zero errors for `/`, `/?demo=1`, `/privacy`, and `/terms`; reports and desktop/mobile captures are under [`.factory/polish-3-evidence/`](polish-3-evidence/).
-- Local mobile Lighthouse: Performance 100, Accessibility 100, Best Practices 100, SEO 100; FCP 1.1 s, LCP 1.6 s, TBT 0 ms, CLS 0, 103 KiB transferred.
-- Production bundles: 26,987 B JavaScript and 9,953 B CSS before gzip.
+Separate or exempt required static app resources from the small page request window while retaining rate limits on server-side endpoints. Then run every `.factory/claims.json` command and the complete `npm test` repeatedly from a clean install. Do not release until the aggregate gate passes without a 429 page or service-worker failure.
 
-## Run locally
+## Run the verification gates
 
 ```sh
 npm ci
 npm test
 npm run lint
 npm run build
-cargo run
+BUILD_SHA=bfdf4ec5b7b9f9b0d178fa8d3a08b116bfab9573 cargo build --release
 ```
 
-Open <http://127.0.0.1:8080/?demo=1> for the isolated sample relay.
-
-## Deployment boundary
-
-The checked-in deployment helper is not run in this work order because it reads or modifies shared resources named `sociobotregistry`, `factory-env`, and a shared storage account. That conflicts with the controller’s explicit rule to access only resources named `sf-family-doodle-relay`. The repository is committed and pushed at `a3ecf1f6c99f403568f0c7ab85be547d93f49dae`. A cold public `/health` check after the push still reported the earlier build `e43fa445ce5748fdad4a6401d79fd4617640fe5d`, confirming that a permitted deployment has not occurred.
-
-No product-code, test, accessibility, privacy, copy, or build finding remains. Deployment is the only external action withheld by the resource-isolation rule.
+No product code was modified during verification. Docker was not installed in the verifier image, so a local Docker build remains unexecuted.
