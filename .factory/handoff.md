@@ -5,7 +5,7 @@
 **PASS.** The static-file limiter defect from verification 15 is repaired and the release is live at <https://family-doodle-relay.sociobot.in>.
 
 - Implementation SHA: `1a60bea4d0294133314922b1b8d05c842743016e`
-- Documentation and evidence SHA: recorded in the follow-up handoff commit.
+- Documentation and evidence SHA: `8c8cdbc31ed600bae7b519423011f7fad8daf401`.
 - Live health: `{"build_sha":"1a60bea4d0294133314922b1b8d05c842743016e","status":"ok"}`.
 - Live revision: `sf-family-doodle-relay--0000049`, the only active healthy revision, with one replica, 100% traffic, and the existing durable `/data` Azure Files mount.
 
