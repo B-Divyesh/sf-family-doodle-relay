@@ -500,17 +500,28 @@ test('@claim:host-end-room the host can end a private room for both players at a
   await guestContext.close();
 });
 
-test('@claim:rate-limit rate limiter returns 429 with Retry-After per trusted ingress client for API and pages', async ({ playwright }) => {
+test('@claim:rate-limit room endpoints return 429 with Retry-After while the app shell stays available during fast reloads', async ({ playwright }) => {
   const client = await playwright.request.newContext({ baseURL: 'http://127.0.0.1:8080' });
   const responses = await Promise.all(Array.from({ length: 55 }, (_, index) => client.get('/api/rooms/NOT-A-ROOM?token=none', { headers: { 'X-Forwarded-For': `203.0.113.${index}, 198.51.100.44` } })));
   const limited = responses.filter(response => response.status() === 429);
   expect(responses.filter(response => response.status() !== 429)).toHaveLength(20);
   expect(limited).toHaveLength(35);
   expect(limited[0].headers()['retry-after']).toBe('1');
-  const pages = await Promise.all(Array.from({ length: 55 }, (_, index) => client.get('/privacy', { headers: { 'X-Forwarded-For': `203.0.113.${index}, 198.51.100.45` } })));
-  const limitedPages = pages.filter(response => response.status() === 429);
-  expect(pages.filter(response => response.status() !== 429)).toHaveLength(20);
-  expect(limitedPages).toHaveLength(35);
-  expect(limitedPages[0].headers()['retry-after']).toBe('1');
+
+  const websocketHandshakes = await Promise.all(Array.from({ length: 55 }, (_, index) => client.get('/ws/NOT-A-ROOM?token=none', { headers: { 'X-Forwarded-For': `203.0.113.${index}, 198.51.100.46` } })));
+  const limitedHandshakes = websocketHandshakes.filter(response => response.status() === 429);
+  expect(websocketHandshakes.filter(response => response.status() !== 429)).toHaveLength(20);
+  expect(limitedHandshakes).toHaveLength(35);
+  expect(limitedHandshakes[0].headers()['retry-after']).toBe('1');
+
+  const shellHeaders = { 'X-Forwarded-For': '198.51.100.47' };
+  const root = await client.get('/', { headers: shellHeaders });
+  expect(root.status()).toBe(200);
+  const appScript = (await root.text()).match(/<script[^>]+src="([^"]+\.js)"/)?.[1];
+  expect(appScript).toBeTruthy();
+  for (const path of ['/', '/sw.js', appScript!]) {
+    const staticResponses = await Promise.all(Array.from({ length: 55 }, () => client.get(path, { headers: shellHeaders })));
+    expect(staticResponses.map(response => response.status()), `${path} must remain available during a rapid reload`).toEqual(Array(55).fill(200));
+  }
   await client.dispose();
 });

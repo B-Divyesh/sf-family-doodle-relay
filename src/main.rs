@@ -361,10 +361,14 @@ async fn security_and_rate_limit(
     next: Next,
 ) -> Response {
     let path = request.uri().path().to_string();
-    if path != "/health" {
+    // The small per-client window protects stateful routes. The app shell and
+    // its required static files must stay available during a fast reload: one
+    // normal page load requests HTML, JS, CSS, imagery, and the service worker.
+    // Those files are cacheable and do not perform room work, so they do not
+    // belong in the endpoint limiter.
+    if path.starts_with("/api/") || path.starts_with("/ws/") {
         let client = trusted_client_identity(&request);
-        let api = path.starts_with("/api/") || path.starts_with("/ws/");
-        let key = format!("{client}:{}", if api { "api" } else { "page" });
+        let key = format!("{client}:endpoint");
         let mut limits = state.limits.lock().await;
         limits.retain(|_, window| window.started.elapsed() < Duration::from_secs(60));
         let window = limits.entry(key).or_insert(LimitWindow {

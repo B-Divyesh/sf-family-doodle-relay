@@ -1,6 +1,6 @@
 # Landing page copy audit
 
-Audited 30 August 2026. Counts use whitespace-separated words. The table includes headings, controls, labels, and visible sentences.
+Audited 5 September 2026. Counts use whitespace-separated words. The table includes headings, controls, labels, and visible sentences.
 
 | Copy | Words | Result |
 |---|---:|---|
@@ -78,6 +78,12 @@ No sentence exceeds 22 words. No banned word appears. Read aloud, the first scre
 | A refunded license cannot enable eight-turn rooms. | 7 | Pass; `refunded-license` |
 
 The legal copy names the stored fields and tested payment behavior without the earlier unproved joint-merchant or generic refund statements.
+
+## Changed README copy
+
+| Copy | Words | Result |
+|---|---:|---|
+| Room API and WebSocket routes allow 20 requests per second for each trusted client connection. | 15 | Pass; `rate-limit` |
 
 ## Terminology
 

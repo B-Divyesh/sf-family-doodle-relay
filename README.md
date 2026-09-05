@@ -39,7 +39,7 @@ docker build --build-arg BUILD_SHA=local -t family-doodle-relay .
 docker run --rm -p 8080:8080 -e PORT=8080 family-doodle-relay
 ```
 
-`GET /health` returns the running build identity. Rooms are deleted at their four-hour expiry. The server allows 20 requests per second for each trusted client connection on every non-health route.
+`GET /health` returns the running build identity. Rooms are deleted at their four-hour expiry. Room API and WebSocket routes allow 20 requests per second for each trusted client connection.
 
 ## Architecture and privacy
 
