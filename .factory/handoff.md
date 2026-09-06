@@ -1,32 +1,31 @@
-# Family Doodle Relay — verification 16 handoff
+# Family Doodle Relay — review 4 handoff
 
 ## Result
 
-**PASS.** Independent verification found zero findings and zero untested claims.
+**FAIL.** Review 4 found two minor defects and zero untested claims.
 
 - Implementation reviewed: `1a60bea4d0294133314922b1b8d05c842743016e`
-- Supplied documentation and evidence: `8c8cdbc31ed600bae7b519423011f7fad8daf401`
-- Documentation follow-up reviewed: `a7fae6ac21f4244d1445b237b81f246f2db465ec`
+- Documentation supplied at review start: `6d5d9fc61832c13adc3e22c869a059b7eec6425a`
+- Live health build: `a7fae6ac21f4244d1445b237b81f246f2db465ec`
 - Live URL: <https://family-doodle-relay.sociobot.in>
-- Full report: [`.factory/verification-16.md`](verification-16.md)
+- Full report: [`.factory/review-4.md`](review-4.md)
 
-## What was verified
+## Findings to fix
 
-- Fresh desktop and phone first screens state the drawing job, child-and-adult audience, and sample-data first action before scrolling.
-- The one-click demo is populated, persistently labelled, resettable, and isolated from seeded real browser data.
-- A live desktop host and phone guest completed all four synchronized turns and downloaded the complete PNG strip.
-- Invalid invites, blank guesses, the 80-character boundary, third-player denial, forged paid input, tenant isolation, host closure, and recovery paths passed.
-- Every one of the 19 literal claim commands passed from a clean checkout.
-- Two consecutive `npm test` runs passed 24 browser tests, 9 Rust tests, the claim-manifest test, and 18 deployment-contract tests.
-- Lint, release build, `dist/`, TypeScript, Rust formatting, Clippy, and diff checks passed.
-- Live route, metadata, legal, link, keyboard, focus, phone sizing, reduced-motion, Axe, service-worker update, offline reload, privacy, and 404 checks passed.
-- API and WebSocket bursts allowed 20 requests, then returned 429 with `Retry-After: 1`. Rapid shell, service-worker, and script requests remained 55/55 HTTP 200.
-- The active deployment has one healthy replica, 100% traffic, one active revision, and durable `/data`. The live deployment validator passed.
-- Mobile Lighthouse 12.8.2 scored 100 in Performance, Accessibility, Best Practices, and SEO.
+1. At the standard Playwright iPhone 13 viewport (390 × 664), the third required first-screen fact is clipped below the fold. Reduce phone header/hero spacing or the fixed hero minimum height.
+2. Browser Back resets the long landing page to the top. Restore the prior scroll position on `popstate` while keeping route focus and announcements.
 
-## Build identity note
+## What passed
 
-Production is now revision `sf-family-doodle-relay--0000050` and `/health` reports `a7fae6ac21f4244d1445b237b81f246f2db465ec`, a later documentation-only commit. All non-`.factory` source is identical to implementation `1a60bea…`, and all 17 served built files match the fresh implementation build. The runtime under review is therefore the implementation candidate even though the container records the later report commit.
+- All 19 literal claim commands passed independently after `npm ci` in a detached clean checkout.
+- `npm test`, `npm run lint`, `npm run build`, the candidate release build, `npm audit --audit-level=high`, and `git diff --check` passed.
+- The live one-click demo is populated, persistently labelled, resettable, downloadable, and isolated from seeded real browser data.
+- A live host and phone guest completed four synchronized turns. Invalid, boundary, third-player, forged-paid, room-isolation, host-end, and recovery paths passed.
+- Live routes, titles, legal pages, links, 404 design, keyboard actions, focus treatment, reduced motion, offline reload, privacy flow, and Axe checks passed apart from the two findings above.
+- Live API and WebSocket bursts each allowed 20 requests, then returned 429 with `Retry-After: 1`; static shell requests remained available.
+- Local restart persistence passed. Production has one healthy active replica, durable `/data`, and 100% traffic; the live deployment validator passed.
+- All 17 served build files match the implementation candidate byte for byte.
+- Lighthouse 12.8.2 scored 100 in Performance, Accessibility, Best Practices, and SEO.
 
 ## Run locally
 
@@ -38,8 +37,12 @@ npm run build
 BUILD_SHA=1a60bea4d0294133314922b1b8d05c842743016e cargo build --release
 ```
 
-Open `http://127.0.0.1:8080/?demo=1` after starting the server. See [`.factory/demo.md`](demo.md) for sample behavior.
+Open `http://127.0.0.1:8080/?demo=1` after starting the server. See [`.factory/demo.md`](demo.md) for the sample behavior.
 
-## Known gaps
+## Evidence
 
-None found. Billing registration and hosted checkout operation remain factory responsibilities outside this repository; the live checkout redirect was available during verification.
+Detailed evidence is in `/work/.evidence/review-4/`. The required report copy and machine result are `/work/.evidence/qa-report.md` and `/work/.evidence/qa-result.json`.
+
+## Next step
+
+Repair F-4-1 and F-4-2 in product code, deploy the resulting implementation, and rerun the complete review. No earlier finding is deferred.
