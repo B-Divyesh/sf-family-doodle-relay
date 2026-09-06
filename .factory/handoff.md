@@ -107,3 +107,41 @@ Verifications 5, 6, 14, and 16 had no findings; their core, demo, deployment, ac
 ## Known gaps
 
 No code or acceptance gap remains in this repair. A real paid transaction was not placed; purchase behavior is covered by the recorded checkout contract and the live public offer inspection.
++
+
+---
+
+# Verification 17 handoff
+
+## Result
+
+**PASS.** Independent verification found zero findings and zero untested public claims.
+
+- Implementation reviewed: `c2a06f834bad070d26f230594b7a72d5ccbdde68`
+- Documentation revision: `6085f35a57eea86b2a2fe5e012e63291f17f7f7e`
+- Live URL: <https://family-doodle-relay.sociobot.in>
+- Live health: HTTP 200 / `status: ok`; build identity is the report-only documentation SHA. The diff from the implementation SHA changes only factory documentation, so the product runtime remains the reviewed candidate.
+
+## Verified
+
+A clean checkout ran `npm ci`, all 19 literal claim commands, `npm test`, `npm run lint`, `npm run build`, `npm audit --audit-level=high`, and the candidate release build successfully. The full suite reported 9 Rust tests, 18 deployment-contract tests, and 25 Chromium tests; audit found zero vulnerabilities.
+
+Fresh live desktop and iPhone checks covered the first screen, sample sandbox and reset, isolated real storage, four-turn two-browser relay, PNG download, invalid/recovery paths, host end-room, offline reload, reduced motion, keyboard/focus/history restoration, legal pages, designed 404, routes, links, Axe, and rate limits. Mobile Lighthouse was 100 for Performance, Accessibility, Best Practices, and SEO.
+
+The live API and WebSocket each allowed 20 requests and then returned 429 with `Retry-After: 1`; static shell paths stayed 200. Health returned a valid build identity. Rust regressions cover SQLite access-key hashing, expiry, independent connection visibility, and persisted completed-room recovery. Every prior review and verification finding, including minor findings, was rechecked and remains closed.
+
+## How to verify
+
+```sh
+npm ci
+npm test
+npm run lint
+npm run build
+npm run test:deployment
+```
+
+Open `https://family-doodle-relay.sociobot.in/?demo=1` for the isolated sample.
+
+## Known gaps
+
+None. No product code was changed in verification 17.
