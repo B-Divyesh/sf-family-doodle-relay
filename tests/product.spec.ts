@@ -55,13 +55,33 @@ test('real routes expose complete metadata and meet the page baseline', async ({
 
 test('route changes update focus, history, legal links, and the designed 404', async ({ page }) => {
   await page.goto('/');
+  await page.evaluate(() => {
+    const root = document.documentElement;
+    const previous = root.style.scrollBehavior;
+    root.style.scrollBehavior = 'auto';
+    window.scrollTo(0, root.scrollHeight);
+    root.style.scrollBehavior = previous;
+    return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  });
+  const landingScroll = await page.evaluate(() => window.scrollY);
+  expect(landingScroll).toBeGreaterThan(1_000);
   await page.getByRole('contentinfo').getByRole('link', { name: 'Privacy' }).click();
   await expect(page).toHaveURL('/privacy');
   await expect(page).toHaveTitle('Privacy — Family Doodle Relay');
   await expect(page.getByRole('heading', { level: 1 })).toBeFocused();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
   await page.goBack();
   await expect(page).toHaveURL('/');
   await expect(page.getByRole('heading', { level: 1 })).toBeFocused();
+  await expect.poll(async () => Math.abs(await page.evaluate(() => window.scrollY) - landingScroll)).toBeLessThanOrEqual(1);
+  await page.goForward();
+  await expect(page).toHaveURL('/privacy');
+  await expect(page.getByRole('heading', { level: 1 })).toBeFocused();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+  await page.goBack();
+  await expect(page).toHaveURL('/');
+  await expect(page.getByRole('heading', { level: 1 })).toBeFocused();
+  await expect.poll(async () => Math.abs(await page.evaluate(() => window.scrollY) - landingScroll)).toBeLessThanOrEqual(1);
   await page.getByRole('contentinfo').getByRole('link', { name: 'Terms' }).click();
   await expect(page).toHaveURL('/terms');
   await expect(page.getByRole('heading', { level: 1 })).toBeFocused();
@@ -72,6 +92,22 @@ test('route changes update focus, history, legal links, and the designed 404', a
   await expect(page.getByRole('heading', { name: 'Page not found' })).toBeFocused();
   await expect(page).toHaveTitle('Page not found — Family Doodle Relay');
   await expect(page.getByRole('link', { name: 'Return to the front page' })).toHaveAttribute('href', '/');
+});
+
+test('short phone first screen shows the job, audience, action, next step, and all three facts', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 664 });
+  await page.goto('/');
+  const required = [
+    page.getByRole('heading', { name: 'Draw together from two places' }),
+    page.getByText('For a child and one trusted adult who want a calm game between calls.'),
+    page.getByRole('link', { name: 'Try it with sample data' }),
+    page.getByText('A sample relay opens next. Nothing is saved.'),
+    page.getByText('Two people only'),
+    page.getByText('Rooms close within four hours'),
+    page.getByText('$6 once, no subscription'),
+  ];
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  for (const item of required) await expect(item).toBeInViewport({ ratio: 1 });
 });
 
 test('first-screen sample action opens an isolated resettable query demo in one click', async ({ page }) => {

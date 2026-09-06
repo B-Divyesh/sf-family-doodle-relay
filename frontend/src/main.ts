@@ -19,6 +19,8 @@ const LICENSE_KEY = 'sb_license:family-doodle-relay';
 const LICENSE_CACHE = 'sb_license_check:family-doodle-relay';
 let cleanup: (() => void) | undefined;
 let demoVersion = 0;
+type RelayHistoryState = { relayScroll?: { x: number; y: number }; [key: string]: unknown };
+let scrollStateFrame = 0;
 
 function escapeHtml(value: string) {
   return value.replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]!));
@@ -242,14 +244,20 @@ function notFound(){setMeta('Page not found — Family Doodle Relay','Return to 
 function cachedLicense(){try{return JSON.parse(localStorage.getItem(LICENSE_CACHE)||'null');}catch{return null;}}
 function hasFreshLicenseCheck(){const cached=cachedLicense();return Boolean(cached&&Date.now()-cached.checked<86400000);}
 function validCachedLicense(){const cached=cachedLicense();return Boolean(cached?.valid&&Date.now()-cached.checked<86400000);}
-async function handleLicense(){const params=new URLSearchParams(location.search);const received=params.get('license');if(received){localStorage.setItem(LICENSE_KEY,received);history.replaceState({},'',location.pathname);await verifyLicense(received);}else{const token=localStorage.getItem(LICENSE_KEY);if(token&&!hasFreshLicenseCheck())await verifyLicense(token);}}
+async function handleLicense(){const params=new URLSearchParams(location.search);const received=params.get('license');if(received){localStorage.setItem(LICENSE_KEY,received);history.replaceState(history.state,'',location.pathname);await verifyLicense(received);}else{const token=localStorage.getItem(LICENSE_KEY);if(token&&!hasFreshLicenseCheck())await verifyLicense(token);}}
 async function verifyLicense(token:string){const status=document.querySelector('#license-status');if(status)status.textContent='Checking the license…';try{const response=await fetch(`https://api.sociobot.in/api/v1/products/family-doodle-relay/verify?license=${encodeURIComponent(token)}`);const result=await response.json();localStorage.setItem(LICENSE_CACHE,JSON.stringify({valid:Boolean(result.valid),checked:Date.now()}));if(status)status.textContent=result.valid?'Family edition is ready on this device.':'This license is not active. Check the token or buy the family edition.';}catch{if(status)status.textContent='The license check is offline. Free play still works.';}}
 async function restoreLicense(event:SubmitEvent){event.preventDefault();const form=event.currentTarget as HTMLFormElement;const token=(form.elements.namedItem('license') as HTMLInputElement).value.trim();if(!token){document.querySelector('#license-status')!.textContent='Paste the license from your receipt first.';return;}localStorage.setItem(LICENSE_KEY,token);await verifyLicense(token);}
 
 function bindLinks(){document.querySelectorAll<HTMLAnchorElement>('a[data-link]').forEach(link=>link.addEventListener('click',event=>{if(event.metaKey||event.ctrlKey||event.shiftKey)return;event.preventDefault();navigate(link.pathname+link.search+link.hash);}));}
-function navigate(path:string){cleanup?.();cleanup=undefined;history.pushState({},'',path);route();}
-function focusHeading(){requestAnimationFrame(()=>{const heading=document.querySelector<HTMLElement>('h1');heading?.focus();const announcer=document.querySelector('#route-announcer');if(announcer&&heading)announcer.textContent=heading.textContent||'';});}
-function route(){const path=location.pathname;const sampleMode=path==='/'&&new URLSearchParams(location.search).get('demo')==='1';window.scrollTo(0,0);if(sampleMode||path==='/demo')demo();else if(path==='/')landing();else if(path==='/play')homeRoomStart();else if(path==='/privacy'||path==='/terms')legalPage(path.slice(1) as 'privacy'|'terms');else if(path.startsWith('/join/')){const code=path.split('/').pop()!;history.replaceState({},'','/');landing();const input=document.querySelector<HTMLInputElement>('#room-code')!;input.value=code;input.focus();}else if(/^\/room\/[A-Z0-9]+$/i.test(path))void loadRoom(path.split('/').pop()!.toUpperCase());else notFound();}
-window.addEventListener('popstate',()=>{cleanup?.();route();});
-route();
+function currentHistoryState():RelayHistoryState{return history.state&&typeof history.state==='object'?history.state as RelayHistoryState:{};}
+function saveScrollPosition(){history.replaceState({...currentHistoryState(),relayScroll:{x:window.scrollX,y:window.scrollY}},'',location.href);}
+function setScrollPosition(position:{x:number;y:number}){const root=document.documentElement;const previous=root.style.scrollBehavior;root.style.scrollBehavior='auto';window.scrollTo(position.x,position.y);root.style.scrollBehavior=previous;}
+function navigate(path:string){saveScrollPosition();cleanup?.();cleanup=undefined;history.pushState({relayScroll:{x:0,y:0}},'',path);route({x:0,y:0});}
+function focusHeading(){requestAnimationFrame(()=>{const heading=document.querySelector<HTMLElement>('h1');heading?.focus({preventScroll:true});const announcer=document.querySelector('#route-announcer');if(announcer&&heading)announcer.textContent=heading.textContent||'';});}
+function route(scrollPosition:{x:number;y:number}){const path=location.pathname;const sampleMode=path==='/'&&new URLSearchParams(location.search).get('demo')==='1';if(scrollPosition.x===0&&scrollPosition.y===0)setScrollPosition(scrollPosition);if(sampleMode||path==='/demo')demo();else if(path==='/')landing();else if(path==='/play')homeRoomStart();else if(path==='/privacy'||path==='/terms')legalPage(path.slice(1) as 'privacy'|'terms');else if(path.startsWith('/join/')){const code=path.split('/').pop()!;history.replaceState({...currentHistoryState(),relayScroll:{x:0,y:0}},'','/');landing();const input=document.querySelector<HTMLInputElement>('#room-code')!;input.value=code;input.focus();}else if(/^\/room\/[A-Z0-9]+$/i.test(path))void loadRoom(path.split('/').pop()!.toUpperCase());else notFound();requestAnimationFrame(()=>setScrollPosition(scrollPosition));}
+history.scrollRestoration='manual';
+if(!currentHistoryState().relayScroll)history.replaceState({...currentHistoryState(),relayScroll:{x:window.scrollX,y:window.scrollY}},'',location.href);
+window.addEventListener('scroll',()=>{cancelAnimationFrame(scrollStateFrame);scrollStateFrame=requestAnimationFrame(saveScrollPosition);},{passive:true});
+window.addEventListener('popstate',event=>{cancelAnimationFrame(scrollStateFrame);cleanup?.();cleanup=undefined;const position=(event.state as RelayHistoryState|null)?.relayScroll??{x:0,y:0};route(position);});
+route(currentHistoryState().relayScroll??{x:0,y:0});
 if ('serviceWorker' in navigator) window.addEventListener('load', () => { void navigator.serviceWorker.register('/sw.js'); });
