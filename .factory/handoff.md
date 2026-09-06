@@ -1,3 +1,50 @@
+# Family Doodle Relay — review 5 handoff
+
+## Result
+
+**PASS.** Review 5 found zero findings and zero untested public claims. No product code was changed.
+
+- Implementation reviewed: `c2a06f834bad070d26f230594b7a72d5ccbdde68`
+- Documentation revision at review start: `34815a5880e28b695b6de9070729702d75e3432c`
+- Live health build: `6085f35a57eea86b2a2fe5e012e63291f17f7f7e`
+- Live URL: <https://family-doodle-relay.sociobot.in>
+
+The live build differs from the implementation only by report and handoff files. Its product runtime remains the reviewed candidate.
+
+## Verification
+
+From a clean detached checkout of the implementation candidate:
+
+```sh
+npm ci
+npm test
+npm run lint
+npm run build
+npm audit --audit-level=high
+BUILD_SHA=c2a06f834bad070d26f230594b7a72d5ccbdde68 cargo build --release
+```
+
+All 19 literal commands in `.factory/claims.json` passed separately. The full test command passed its 25 Chromium tests, 9 Rust tests, claims-manifest test, and 18 deployment-contract tests. Audit found zero vulnerabilities. Build output remains 9.69 kB gzip JavaScript and 2.96 kB gzip CSS.
+
+Fresh live desktop and phone checks covered the plain first screen, one-click sample and reset, real-data isolation, a four-turn two-browser relay, PNG download, invalid/recovery behavior, offline demo reload, keyboard/focus/history behavior, accessibility, legal pages, route titles, designed 404, links, health, and live API/WebSocket rate allowances. API and WebSocket bursts each allowed 20 ordinary responses then returned 35 HTTP 429 responses with `Retry-After: 1`.
+
+`verify-url.sh` and Playwright Axe passed on the audited routes. All prior review, polish, and verification findings were rechecked and remain closed. Detailed evidence is in `.factory/review-5.md` and `/work/.evidence/review-5/`.
+
+## How to run
+
+```sh
+npm ci
+npm run dev
+```
+
+Open <http://localhost:5173> or the isolated sample at <https://family-doodle-relay.sociobot.in/?demo=1>.
+
+## Known gaps
+
+None.
+
+---
+
 # Family Doodle Relay — repair 13 handoff
 
 ## Result
