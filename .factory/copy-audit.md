@@ -1,6 +1,6 @@
 # Landing page copy audit
 
-Audited 5 September 2026. Counts use whitespace-separated words. The table includes headings, controls, labels, and visible sentences.
+Audited again 6 September 2026. Counts use whitespace-separated words. The table includes headings, controls, labels, and visible sentences.
 
 | Copy | Words | Result |
 |---|---:|---|
